@@ -1,7 +1,7 @@
 # The purpose of thie rrdtool-cli facade library is to make
 # the configuration of rrd creation, update and graph easier and faster,
 # by enabling the user to create definitions of rrdatabases, datasouces
-# and graphs that are reusable for creating, updating and graphing
+# and graphs that are reusable for creating, updating and graphing
 # a wide variety of graphs,  easily and with peace of mind.
 
 # Below are classes for create(), that I will probably use to compose these
@@ -95,8 +95,10 @@ def fetch(filename, consolidation='AVERAGE', start=None, end=None, resolution=No
 def graph(indicators=[], outfile='-', options=[], data=[]):
     #FIXME: Shall we enumerate all (20+) cli options in the fn signature
     #       or use a options list ? (with default best options)
-
     pass
+    # !! don't use graphing from cli ! it will reload fonts cache every time !
+    # Use it from a shared library (does pythonrrd lib do that ??)
+    # Also see: Use rrdtool through pipe mode (australia guy)
 
 def _call():
     "rrdtool cli call helper"

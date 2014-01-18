@@ -9,6 +9,11 @@
 # and makes them reusable - that is the point of that library.
 # E.g. the user can graphe multiple graphs of multiple sources
 # with multiple style by reusing Database, DataSource and GraphData.
+#
+# Global FIXMEs:
+# - Reuse the cli doc option definitions in classes variables doc
+#   (with useful links to rrdtool apidoc?)
+
 
 # Below are classes that are reused across pyrrdtool components
 class Component():
@@ -20,8 +25,8 @@ class Database(Component):
     "and reflects the rrd create command options."
     "This class is used by the create() command and is reused"
     "for fetch() and graph()"
-    # FIXME: Reuse the cli doc option definitions
-    filename = None
+    #FIXME: we could do it ORM-style where the db filename is {name}.rrd
+    name = None
     "Filename of the database (.rrd file)"
     datasources = [] #FIXME: shall it be the object or the object.name string, or both ?
     "DataSource definitions (objects)"
@@ -33,6 +38,8 @@ class Database(Component):
     "Archive step interval"
     overwrite = True
     "Overwrite any existing database file"
+    def filename(s):
+        return s.name + '.rrd' #FIXME: use os.path
 
 # Below are classes for create(), that I will probably use to compose these
 # complex DS:speed:COUNTER:600:U:U and RRA:AVERAGE:0.5:1:24 patterns
@@ -48,6 +55,7 @@ class DataSource(Component):
     # http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html
     type = None #FIXME: object instance or object.name ?
     "DataType to use for this source"
+    database = None #FIXME: database object reference should be set by constructor
 
 # FIXME: Shall we make one class per DST, with their named arguments names ?
 #        class DataType(Component):
@@ -102,9 +110,35 @@ class RoundRobinArchive(Component):
 # http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html
 # Remember: the goal is to reuse DataSource and RRD configs
 #           try to create a ~ORM for rrd? :)
-class GraphConfig(Component):
-    "Common denominator of graph data and variables classes"
-    pass
+class Graph(Component):
+    "Represents a rrdtool graph and contains all the possible options"
+    "for the rrdtool graph function" 
+    #FIXME: Reuse cli option names and doc (--* options)
+    option1 = None
+    option2 = None
+    calculation = [] #FIME: can you reuse anything from Database and DataSources ?
+    "Data calculation options"
+    variables = [] #FIXME: reuse DataSources ?
+    "Variables definitions"
+    graph = [] #FIXME: factorize graph elements for configs reusablility ? I think yes.
+    "Graph elements definitions"
+    print = [] #FIXME: same as graphs
+    "Print elements definitions"
+
+#class VariableDefinition(Component):
+#    pass
+#
+#class GraphElement(Component):
+#    dst = [] #FIXME: review name
+#
+#class PrintElement(Component):
+#    pass
+
+class DstDefinition(Component):
+    "Common class for available graph DSTs"
+    def __string__(s):
+        "Outputs a formatted DST options string (eg. 'DST:DEF:0.4:0.1')"
+        pass
 
 class DEF(GraphConfig):
     filename = None
@@ -116,10 +150,12 @@ class DEF(GraphConfig):
     end = None
 
 class CDEF(GraphConfig):
-    expression = None 
+    pass
+    #FIXME: reuse CDEF dst arguments names and types
 
 class VDEF(GraphConfig):
-    expression = None 
+    pass
+    #FIXME: same as CDEF, and so on with all available DSTs
 
 # Shorthands
 RRD = Database

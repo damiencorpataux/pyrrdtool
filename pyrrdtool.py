@@ -97,6 +97,7 @@ def graph(indicators=[], outfile='-', options=[], data=[]):
     #       or use a options list ? (with default best options)
     pass
     # !! don't use graphing from cli ! it will reload fonts cache every time !
+    #    Tobi says the way out is to run 'rrdtool -'
     # Use it from a shared library (does pythonrrd lib do that ??)
     # Also see: Use rrdtool through pipe mode (australia guy)
 

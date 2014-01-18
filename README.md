@@ -16,3 +16,8 @@ generation.
 
 It should be easy to provide the graphing feature as a REST API that return
 graph images binaries.
+
+--
+
+Because writing this library is also an in-depth learning of rrdtool,
+the code should be commented nicely to *promote the understanding of what's happening*

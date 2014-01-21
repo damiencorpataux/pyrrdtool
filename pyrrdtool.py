@@ -25,11 +25,11 @@ class Database(Component):
     "and reflects the rrd create command options."
     "This class is used by the create() command and is reused"
     "for fetch() and graph()"
-    #FIXME: we could do it ORM-style where the db filename is {name}.rrd
     name = None
-    "Filename of the database (.rrd file)"
+    "Name of the database (ie. {name}.rrd file)"
     _datasources = [] #FIXME: shall it be the object or the object.name string, or both ?
     "DataSource definitions (objects)"
+    #FIXME: getter/setter not working properly
     @property
     def datasources(s):
         return s._datasources
@@ -87,6 +87,7 @@ class Database(Component):
 #       is it a good idea?
 #class Variable(Component):
 #    "Links a DataSource and a Database, and abstracts rrdtool internals"
+#    #FIXME: weakref module could be used to keep refs
 #    datasource = None
 #    database = None
 
@@ -197,8 +198,14 @@ class Graph(Component):
     name = '-'
     #FIXME: Reuse cli options names and doc (--* options)
     #       Implement as 1 attribute per option, or options = [] ?
-    option1 = None
-    option2 = None
+    options = {
+        'imgformat': None,
+        "Values': PNG|SVG|EPS|PDF"
+        'no-rrdtool-tag': True,
+        "Hides Tobis credits"
+        'option2': None,
+        'option3': None,
+    }
     data = []
     "Variables and calculation definitions (GraphData objects)"
     "reflects rrdtool graph [data definition ...] [data calculation ...]"
@@ -231,7 +238,7 @@ class GraphElement(Component):
     pass
 
 class GraphData(GraphElement):
-    "Base class for graph data definitions classes"
+    "Base class for graph data definition classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_data.en.html"
     INSTRUCTIONS_TYPES = ['DEF', 'VDEF', 'CDEF']
     instruction = None
@@ -246,18 +253,19 @@ class GraphData(GraphElement):
 #FIXME: Shall we create 1 class per GraphData element (DEF,CDEF,VDEF) ?
 #       Note that CDEF and VDEF use the RPN
 #class DEF(GraphElement):
-#    name = None
+#    vname = None
 #    #FIXME: there is something to do with /reuse/ of DataSources config here
 #    DS = None
 #    consolidation = None # Can RRA.consolidation be reused here (through DS.rrd reference, for automatic setting of this variable) ? Or is it autoset by the cli if option is not specified ?
 #    step = None # Same as consolidation, with RRD.step through DS.rrd reference too
 #    start = None
 #    end = None
+#    reduce = None
 #class CDEF(GraphElement):
-#    name = None
+#    vname = None
 #    rpn = []
 #class VDEF(GraphElement):
-#    name = None
+#    vname = None
 #    rpn = []
 
 class GraphStyle(GraphElement):
@@ -274,16 +282,59 @@ class GraphStyle(GraphElement):
             s.instruction,
             ':'.join([str(arg) for arg in s.args]))
 #FIXME: shall we create 1 class per GraphStyle element ?
-#class PRINT(GraphStyle): pass
-#class GPRINT(GraphStyle): pass
-#class COMMENT(GraphStyle): pass
-#class VRULE(GraphStyle): pass
-#class HRULE(GraphStyle): pass
-#class LINE(GraphStyle): pass
-#class AREA(GraphStyle): pass
-#class TICK(GraphStyle): pass
-#class SHIFT(GraphStyle): pass
-#class TEXTALIGN(GraphStyle): pass
+#NOTE: some common factors:
+# a. legend, color
+# b. dashes, dashes-offset
+#class PRINT(GraphStyle):
+#    vname = None
+#    format = None
+#class GPRINT(PRINT): pass #or
+#class GPRINT(GraphStyle):
+#    vname = None
+#    format = None
+#class COMMENT(GraphStyle):
+#    text = None
+#class VHRULE(GraphStyle):
+#    color = None
+#    legend = None
+#    dashes = None
+#    dashOffset = None
+#    def __init__(s, p, color):
+#        setattr(s, s.p) = val
+#        s.color = color
+#class VRULE(VHRULE):
+#    p = 'time'
+#    time = None
+#class HRULE(VHRULE):
+#    p = 'value'
+#    value = None
+#class LINE(GraphStyle):
+#    width = None
+#    value = None
+#    color = None
+#    legend = None
+#    STACK = None
+#    skipscale = None
+#    dahses = None
+#    dashOffset = None
+#class AREA(GraphStyle):
+#    value = None
+#    color = None
+#    legend = None
+#    STACK = None
+#    skipscale = None
+#class TICK(GraphStyle):
+#    vname = None
+#    color = None
+#    alpha = None
+#    fraction = None
+#    legend = None
+#class SHIFT(GraphStyle):
+#    vname = None
+#    offset = None
+#class TEXTALIGN(GraphStyle):
+#    value = None
+#    "Values: left|right|justified|center"
 
 
 # Shorthands

@@ -13,6 +13,12 @@
 # Global FIXMEs:
 # - Reuse the cli doc option definitions in classes variables doc
 #   (with useful links to rrdtool apidoc?)
+#
+# Global TODOs:
+# - Create the concept of GraphTemplate():
+#   takes a DataSource as argument and applies a predefined template
+#   to this datasource. Returning a set of graph data and style
+#   to be fed directly to the Graph(Component).
 
 
 # Below are classes that are reused across pyrrdtool components
@@ -44,8 +50,8 @@ class Database(Component):
     "Archive start time"
     step = None
     "Archive step interval"
-    overwrite = True
-    "Overwrite any existing database file"
+    noOverwrite = None
+    "Overwrite any existing database file. Values: True or False"
     def __init__(s, name, ds, rra, step=None, start=None, overwrite=True):
         #FIXME: would be good to set overwrite to False by default,
         #       unlike the default of rrdtool create (which is to overwrite),
@@ -85,12 +91,30 @@ class Database(Component):
 #       reusable datasources directory.
 #       Moreover, il will 
 #       is it a good idea?
-#class Variable(Component):
-#    "Links a DataSource and a Database, and abstracts rrdtool internals"
-#    #FIXME: weakref module could be used to keep refs
-#    datasource = None
-#    database = None
+class Variable(Component): #or Indicator ?
+    "Links a DataSource and a Database, and abstracts rrdtool internals"
+    #FIXME: weakref module could be used to keep refs
+    #       noooo, no need, simply say s.datasource = ds
+    vname = None
+    "Virtual name of the datasouce, used by graph components"
+    "(defaults to ds.name)"
+    ds = None
+    rrd = None
+    rra = []
+    def __init__(s, rrd, ds_name, vname=None):
+        for ds in rrd.datasources:
+            #uglycode
+            if ds.name == ds_name: break
+        s.ds = ds
+        s.rrd = ds._rrd #FIXME: implement this is RRD.datasources@setter
+        s.rra = ds._rra #FIXME: same as above 
+        s.vname = vname if vname else ds.name
 
+#class StyleTemplate(Component):
+#    "Base class for defining arbitrary style templates to be applied to the given datasource"
+#    style = []
+#    def __init__(s, ds):
+#        pass
 
 # Below are classes for create(), that I will probably use to compose these
 # complex DS:speed:COUNTER:600:U:U and RRA:AVERAGE:0.5:1:24 patterns
@@ -120,7 +144,7 @@ class DataSourceType(Component):
     TYPES = ['GAUGE', 'COUNTER', 'DERIVE', 'ABSOLUTE', 'COMPUTE']
     "Available types"
 
-class DataSourceTypeBase(DataSourceType):
+class DataSourceTypeCommon(DataSourceType):
     heartbeat = None
     "the maximum number of seconds that may pass between two updates of this"
     "data source before the value of the data source is assumed to be *UNKNOWN*"
@@ -140,10 +164,10 @@ class DataSourceTypeBase(DataSourceType):
         return '%s:%s' % (
             s.__class__.__name__,
             ':'.join([str(getattr(s,arg)) for arg in ['heartbeat','min','max']]))
-class GAUGE(DataSourceTypeBase): pass
-class COUNTER(DataSourceTypeBase): pass
-class DERIVE(DataSourceTypeBase): pass
-class ABSOLUTE(DataSourceTypeBase): pass
+class GAUGE(DataSourceTypeCommon): pass
+class COUNTER(DataSourceTypeCommon): pass
+class DERIVE(DataSourceTypeCommon): pass
+class ABSOLUTE(DataSourceTypeCommon): pass
 class COMPUTE(DataSourceType):
 #FIXME: RPN is used by the COMPUTE DataType and the CDEF and VDEF graph variables type.
 #        Shall we make an RPN class whose purpose is to
@@ -164,6 +188,7 @@ class RoundRobinArchive(Component):
     #       in order to have named arguments as class properties ?
     #       as well as HWPREDICT|MHWPREDICT|... classes ? 
     consolidation = None
+    "Consolidation function. Values: AVERAGE|MIN|MAX|LAST"
     "The consolidation function to use with the archive"
     "This affects how data is resampled to lower resolutions"
     "and should be chosen according to what you want to track"
@@ -252,15 +277,24 @@ class GraphData(GraphElement):
             ':'.join([str(arg) for arg in s.args]))
 #FIXME: Shall we create 1 class per GraphData element (DEF,CDEF,VDEF) ?
 #       Note that CDEF and VDEF use the RPN
-#class DEF(GraphElement):
-#    vname = None
-#    #FIXME: there is something to do with /reuse/ of DataSources config here
-#    DS = None
-#    consolidation = None # Can RRA.consolidation be reused here (through DS.rrd reference, for automatic setting of this variable) ? Or is it autoset by the cli if option is not specified ?
-#    step = None # Same as consolidation, with RRD.step through DS.rrd reference too
-#    start = None
-#    end = None
-#    reduce = None
+class DEF(GraphElement):
+    vname = None
+    #FIXME: there is something to do with /reuse/ of DataSources config here
+    datasource = None
+    consolidation = None # Can RRA.consolidation be reused here (through DS.rrd reference, for automatic setting of this variable) ? Or is it autoset by the cli if option is not specified ?
+    step = None # Same as consolidation, with RRD.step through DS.rrd reference too
+    start = None
+    end = None
+    reduce = None
+    def __init__(s, datasource, vname=None):
+       s.datasource = datasource
+       s.vname = vname if vname else datasource.name
+    def __str__(s):
+        return '%s:%s=%s:%s:%s' % (
+            'DEF', #s.__class__.__name__,
+            s.vname, s.datasource._rrd.filename(), s.datasource.name,
+            #FIXME: arbitratily uses the first available RRA
+            s.datasource._rra[0].consolidation)
 #class CDEF(GraphElement):
 #    vname = None
 #    rpn = []
@@ -340,7 +374,7 @@ class GraphStyle(GraphElement):
 # Shorthands
 RRD = Database
 DS = DataSource
-DST = DataType = DataSourceType
+DST = DataSourceType
 RRA = RoundRobinArchive
 
 
@@ -400,6 +434,21 @@ def _call():
     # Use it from a shared library to avoid reloading fonts cache
     # on every call (does pythonrrd lib do that, is it a shared lib ??)
 
+def datasources():
+    "Test implementation to collect existing Datasources objects"
+    #FIXME: return a list of Variable objects ?
+    #FIXME: the DataSource should really be added its rrd & rra references list
+    #       it would make it so easy to use (eg. add a whole RRD.datasources to a graph!)
+    #       but it is a short round towards that goal
+    import gc
+    datasources = {}
+    for rrd in gc.get_objects():
+        if isinstance(rrd, Database):
+            for ds in rrd.datasources:
+                ds._rrd = rrd
+                ds._rra = rrd.rrarchives
+                datasources[ds.name] = ds
+    return datasources
 
 # Below are definition import/export functions
 # This might be another piece of software (standalone or with webview)
@@ -410,6 +459,10 @@ def json_load(filename):
 def json_import(string):
     pass
 
-def json_export():
+def json_export(obj):
     "Serializes the given object into a json string"
-    pass
+    #FIXME: not working properly
+    #FIXME: implement a recursive function to develop variables containing dict objects
+    #FIXME: how to manage both objects serialization and referencing (for composition) ?
+    import json
+    return json.dumps(obj.__dict__.items())

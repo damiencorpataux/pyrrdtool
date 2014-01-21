@@ -11,8 +11,13 @@
 # with multiple style by reusing Database, DataSource and GraphData.
 #
 # Global FIXMEs:
+# 1. Keep the eg. DEF class to be constructed with plain arguments
+#    and create a, say, fDEF class (a facade) that handles a Variable and
+#    creates a DEF object, able to output the cli args.
+#    This will be better for clarity, understanding, testing and debugging.
 # - Reuse the cli doc option definitions in classes variables doc
 #   (with useful links to rrdtool apidoc?)
+# - Turn the test.py into a UnitTest
 #
 # Global TODOs:
 # - Create the concept of GraphTemplate():

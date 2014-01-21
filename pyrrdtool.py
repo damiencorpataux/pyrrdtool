@@ -19,6 +19,7 @@
 #   takes a DataSource as argument and applies a predefined template
 #   to this datasource. Returning a set of graph data and style
 #   to be fed directly to the Graph(Component).
+#   But maybe in a super-module
 
 
 # Below are classes that are reused across pyrrdtool components
@@ -106,10 +107,11 @@ class Variable(Component): #or Indicator ?
             #uglycode
             if ds.name == ds_name: break
         s.ds = ds
-        s.rrd = ds._rrd #FIXME: implement this is RRD.datasources@setter
-        s.rra = ds._rra #FIXME: same as above 
+        s.rrd = rrd
+        s.rra = rrd.rrarchives
         s.vname = vname if vname else ds.name
 
+#FIXME: Keep this for the pyrrd super-module, that provides more complex features.
 #class StyleTemplate(Component):
 #    "Base class for defining arbitrary style templates to be applied to the given datasource"
 #    style = []
@@ -280,21 +282,23 @@ class GraphData(GraphElement):
 class DEF(GraphElement):
     vname = None
     #FIXME: there is something to do with /reuse/ of DataSources config here
-    datasource = None
+    #       -> yes, the concept of Variable (or Indicator?)
+    variable = None
+    "Variable definition object, contains vname definition"
     consolidation = None # Can RRA.consolidation be reused here (through DS.rrd reference, for automatic setting of this variable) ? Or is it autoset by the cli if option is not specified ?
     step = None # Same as consolidation, with RRD.step through DS.rrd reference too
     start = None
     end = None
     reduce = None
-    def __init__(s, datasource, vname=None):
-       s.datasource = datasource
-       s.vname = vname if vname else datasource.name
+    def __init__(s, variable):
+       s.variable = variable
+       #s.vname = variable.name #vname is contained in s.variable.vname
     def __str__(s):
         return '%s:%s=%s:%s:%s' % (
             'DEF', #s.__class__.__name__,
-            s.vname, s.datasource._rrd.filename(), s.datasource.name,
+            s.variable.vname, s.variable.rrd.filename(), s.variable.ds.name,
             #FIXME: arbitratily uses the first available RRA
-            s.datasource._rra[0].consolidation)
+            s.variable.rra[0].consolidation)
 #class CDEF(GraphElement):
 #    vname = None
 #    rpn = []

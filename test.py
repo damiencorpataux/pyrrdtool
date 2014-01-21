@@ -31,9 +31,10 @@ d = rrd.RRD('test',
     start=920804400)
 print d
 
-#FIXME: it should not be necessary to get ds though rrd.ds()
+#FIXME: it should not be necessary to get ds though rrd.datasource()
 #       because the backrefs to rrd & rra should be done by RRD.setter()
-ds = rrd.datasources()['speed']
+#ds = rrd.datasources()['speed']
+ds = rrd.Variable(d, 'speed')
 import pprint as pp
 #pp.pprint(ds.__dict__)
 
@@ -41,8 +42,7 @@ g = rrd.Graph(
     #FIXME: Data and Style will be expressed with using their own class
 #    [rrd.GraphData('DEF', ['myspeed=test.rrd','speed','AVERAGE'])],
     [
-        rrd.DEF(ds),
-        rrd.DEF(ds, 'myspeed')
+        rrd.DEF(ds), #FIXME: find way to specify which CF
     ],
     #FIXME: same as Data
     [rrd.GraphStyle('LINE2', ['myspeed#FF0000'])]

@@ -1,16 +1,11 @@
 import pyrrdtool as rrd
 
-dt = rrd.DataType()
-dt.type = 'COUNTER'
-dt.args = [600,0,100]
-print dt
-ds = rrd.DataSource()
-ds.name = 'speed'
-ds.type = dt
+ds = rrd.DataSource('speed', rrd.COUNTER(600))
 print ds
-rra = rrd.RRA() # alias of rrd.RoundRobinArchive()
-rra.consolidation = 'AVERAGE'
-rra.args = [0.5, 1, 24]
+
+#rra = rrd.RRA() # alias of rrd.RoundRobinArchive()
+rra = rrd.RRA('AVERAGE', 0.5, 1, 24)
+#rra = rrd.RRA(rra.AVERAGE(0.5, 1, 24))
 print rra
 
 d = rrd.Database('test', [ds], [rra], start=920804400)
@@ -20,7 +15,5 @@ d = rrd.Database('test', [ds], [rra], start=920804400)
 #d.rrarchives = [rra]
 print d
 
-
 g = rrd.Graph()
-#g.name = 'speed1.png'
 print g

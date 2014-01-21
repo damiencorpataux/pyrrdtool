@@ -85,10 +85,10 @@ class Database(Component):
 #       reusable datasources directory.
 #       Moreover, il will 
 #       is it a good idea?
-class Variable(Component):
-    "Links a DataSource and a Database, and abstracts rrdtool internals"
-    datasource = None
-    database = None
+#class Variable(Component):
+#    "Links a DataSource and a Database, and abstracts rrdtool internals"
+#    datasource = None
+#    database = None
 
 
 # Below are classes for create(), that I will probably use to compose these
@@ -107,65 +107,82 @@ class DataSource(Component):
     "DataType to use for this source"
     database = None #FIXME: database object reference should be set by constructor
     "Database name"
+    def __init__(s, name, type):
+        s.name = name
+        s.type = type
     def __str__(s):
         return "DEF:%s:%s" % (s.name, s.type)
 
-# FIXME: Shall we make one class per DST, with their named arguments names ?
-#        class DataType(Component):
-#        class GAUGE|COUNTER|DERIVE|ABSOLUTE(DataType):
-#            heartbeat: None
-#            min: None
-#            max: None
-#        class COMPUTE(DataType):
-#            rpn: []
-#        This shows the RPN-expr only belongs to the COMPUTE and does not need
-#        to be a standalone class, except if we want to reuse RPN expr definitions.
-#        Let's keep it simple for now and refactor if needed in the future
-# FIXME: Shall we make an RPN class whose purpose is to
+class DataSourceType(Component):
+    "Represents a datasource type and options used by DataSource"
+    "Command line equivalent is DST:arg1:arg2:..."
+    TYPES = ['GAUGE', 'COUNTER', 'DERIVE', 'ABSOLUTE', 'COMPUTE']
+    "Available types"
+
+class DataSourceTypeBase(DataSourceType):
+    heartbeat = None
+    "the maximum number of seconds that may pass between two updates of this"
+    "data source before the value of the data source is assumed to be *UNKNOWN*"
+    min = 'U'
+    "Minimum expected values for supplied data"
+    max = 'U'
+    "Maximum expected values for supplied data"
+    "Any value outside the defined range will be regarded as *UNKNOWN*"
+    "Always set If information on min/max expected values is available;"
+    "this will help RRDtool in doing a simple sanity check on the data"
+    "supplied when running update"
+    def __init__(s, heartbeat, min=None, max=None):
+        s.heartbeat = heartbeat
+        if min: s.min = min
+        if max: s.max = max
+    def __str__(s):
+        return '%s:%s' % (
+            s.__class__.__name__,
+            ':'.join([str(getattr(s,arg)) for arg in ['heartbeat','min','max']]))
+class GAUGE(DataSourceTypeBase): pass
+class COUNTER(DataSourceTypeBase): pass
+class DERIVE(DataSourceTypeBase): pass
+class ABSOLUTE(DataSourceTypeBase): pass
+class COMPUTE(DataSourceType):
+#FIXME: RPN is used by the COMPUTE DataType and the CDEF and VDEF graph variables type.
+#        Shall we make an RPN class whose purpose is to
 #        handle RPN (reverse polish notation) expressions comprehensively ?
 #        And makes them reusable ?
 #        http://oss.oetiker.ch/rrdtool/doc/rrdgraph_rpn.en.html
-#        RPN are only used for the COMPUTE type so let's keep it simple
+#        RPN reuse is not todays topic so let's keep it simple
 #        for now and refactor if needed in the future
-class DataType(Component):
-    "Represents a datasource type and options used by DataSource"
-    "Command line equivalent is DST:arg1:arg2:..."
-    #FIXME: TYPES Necessary? No: rrdtool error messages are good enough
-    TYPES = ['GAUGE', 'COUNTER', 'DERIVE', 'ABSOLUTE']
-    "Available types"
-    type = None
-    "Values: GAUGE, COUNTER, DERIVE, ABSOLUTE, COMPUTE"
-    args = []
-    "A list of datatype options"
-    "These options configure the behaviour of the datatype"
-    "The options structure and contents depends on the type used"
-    "http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html"
-    def __str__(s):
-        return '%s:%s' % (s.type, ':'.join([str(arg) for arg in s.args]))
+    rpn = []
+    "Reverse polish notation arguments"
 
 class RoundRobinArchive(Component):
     "Represents a RoundRobinArchive (RRA)  used by create()"
     #FIXME: Necessary? Are the cli/lib error messages good enough ?
     CONSOLIDATION_FUNCTIONS = ['AVERAGE', 'MIN', 'MAX', 'LAST']
     "Available consolidation functions"
-    #FIXME: shall we create class AVERAGE|MIN|MAX|LAST():
-    #                           heartbeat = None
-    #                           min = None
-    #                           max = None
-    #       in order to have names arguments as class properties ?
-    #       ass well as HWPREDICT|MHWPREDICT|... classes...
+    #FIXME: shall we create class AVERAGE|MIN|MAX|LAST() ?
+    #       in order to have named arguments as class properties ?
+    #       as well as HWPREDICT|MHWPREDICT|... classes ? 
     consolidation = None
     "The consolidation function to use with the archive"
     "This affects how data is resampled to lower resolutions"
     "and should be chosen according to what you want to track"
     "eg. MIN is you want to track, say, a minimal service level"
-    args = []
-    "A list of consolidation function options"
+    xff = None
+    steps = None
+    rows = None
+    #FIXME: Update doc: "A list of consolidation function options"
     "These options configure the behaviour of the consolidation function"
     "The options structure and contents depends on the function used"
     "http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html"
+    def __init__(s, consolidation, xff, steps, rows):
+        s.consolidation = consolidation
+        s.xff = xff
+        s.steps = steps
+        s.rows = rows
     def __str__(s):
-        return 'RRA:%s:%s' % (s.consolidation, ':'.join([str(arg) for arg in s.args]))
+        return 'RRA:%s:%s' % (
+            s.consolidation,
+            ':'.join([str(getattr(s, arg)) for arg in ['xff','steps','rows']]))
 
 
 # Below are classes for graph()
@@ -176,57 +193,80 @@ class RoundRobinArchive(Component):
 class Graph(Component):
     "Represents a rrdtool graph and contains all the possible options"
     "for the rrdtool graph function"
+    "http://oss.oetiker.ch/rrdtool/doc/rrdgraph.en.html"
     name = '-'
     #FIXME: Reuse cli option names and doc (--* options)
+    #       Implement as 1 attribute per option, or options = [] ?
     option1 = None
     option2 = None
-    calculation = [] #FIME: can you reuse anything from Database and DataSources ?
-    "Data calculation options"
-    variables = [] #FIXME: reuse DataSources ?
-    "Variables definitions"
-    elements = [] #FIXME: factorize graph elements for configs reusablility ? I think yes.
-    "Graph and prints elements definitions"
-    printe = [] #FIXME: same as elements (remove this class variable)
-    "Print elements definitions"
+    data = []
+    "Variables and calculation definitions (GraphData objects)"
+    "reflects rrdtool graph [data definition ...] [data calculation ...]"
+    "[variable definition ...] options"
+    "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_data.en.html"
+    style = []
+    "Graph and print elements definitions (GraphStyle objects)"
+    "reflects rrdtool graph [graph elelement ...] [print element ...] options"
+    "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     def __str__(s):
-        return 'graph %s ' % (s.name)
+        return 'graph %s %s %s %s' % (
+            s.name,
+            '', #FIXME: options go here
+            ' '.join([str(data) for data in s.data]),
+            ' '.join([str(style) for style in s.style]))
 
-#FIXME: this is same as class Variable above
-#class VariableDefinition(Component):
-#    pass
-#
 class GraphElement(Component):
-    dst = [] #FIXME: review name
-
-#class PrintElement(Component):
-#    pass
-
-class DstDefinition(Component):
-    "Common class for available graph DSTs"
     def __str__(s):
-        "Outputs a formatted DST options string (eg. 'DST:DEF:0.4:0.1')"
-        pass
-class DEF(GraphElement):
-    filename = None
-    #FIXME: The is something to do with /reuse/ of DataSources config here
-    DS = None
-    consolidation = None # Can RRA.consolidation be reused here (through DS.rrd reference, for automatic setting of this variable) ? Or is it autoset by the cli if option is not specified ?
-    step = None # Same as consolidation, with RRD.step through DS.rrd reference too
-    start = None
-    end = None
+        return '%s:%s' % (
+        s.__class__.__name__,
+        '123')
 
-class CDEF(GraphElement):
-    pass
-    #FIXME: reuse CDEF dst arguments names and types
+class GraphData(GraphElement):
+    "Base class for graph data definitions classes"
+    "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_data.en.html"
+    INSTRUCTIONS_TYPES = ['DEF', 'VDEF', 'CDEF']
+    instruction = None
+    args = []
+#FIXME: Shall we create 1 class per GraphData element (DEF,CDEF,VDEF) ?
+#       Note that CDEF and VDEF use the RPN
+#class DEF(GraphElement):
+#    name = None
+#    #FIXME: there is something to do with /reuse/ of DataSources config here
+#    DS = None
+#    consolidation = None # Can RRA.consolidation be reused here (through DS.rrd reference, for automatic setting of this variable) ? Or is it autoset by the cli if option is not specified ?
+#    step = None # Same as consolidation, with RRD.step through DS.rrd reference too
+#    start = None
+#    end = None
+#class CDEF(GraphElement):
+#    name = None
+#    rpn = []
+#class VDEF(GraphElement):
+#    name = None
+#    rpn = []
 
-class VDEF(GraphElement):
-    pass
-    #FIXME: same as CDEF, and so on with all available DSTs
+class GraphStyle(GraphElement):
+    "Base class for graph print elements classes"
+    "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
+    INSTRUCTIONS_TYPES = ['PRINT','GPRINT','COMMENT','VRULE','HRULE','LINE','AREA','TICK','SHIFT','TEXTALIGN']
+    instruction = None
+    args = []
+#FIXME: shall we create 1 class per GraphStyle element ?
+#class PRINT(GraphStyle): pass
+#class GPRINT(GraphStyle): pass
+#class COMMENT(GraphStyle): pass
+#class VRULE(GraphStyle): pass
+#class HRULE(GraphStyle): pass
+#class LINE(GraphStyle): pass
+#class AREA(GraphStyle): pass
+#class TICK(GraphStyle): pass
+#class SHIFT(GraphStyle): pass
+#class TEXTALIGN(GraphStyle): pass
+
 
 # Shorthands
 RRD = Database
 DS = DataSource
-DST = DataSourceType = DataType
+DST = DataType = DataSourceType
 RRA = RoundRobinArchive
 
 
@@ -290,10 +330,12 @@ def _call():
 # Below are definition import/export functions
 # This might be another piece of software (standalone or with webview)
 def json_load(filename):
+    "Returns a list of objects instances defined in the given json filename"
     pass
 
 def json_import(string):
     pass
 
 def json_export():
+    "Serializes the given object into a json string"
     pass

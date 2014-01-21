@@ -111,7 +111,7 @@ class DataSource(Component):
         s.name = name
         s.type = type
     def __str__(s):
-        return "DEF:%s:%s" % (s.name, s.type)
+        return "DS:%s:%s" % (s.name, s.type)
 
 class DataSourceType(Component):
     "Represents a datasource type and options used by DataSource"
@@ -195,7 +195,7 @@ class Graph(Component):
     "for the rrdtool graph function"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph.en.html"
     name = '-'
-    #FIXME: Reuse cli option names and doc (--* options)
+    #FIXME: Reuse cli options names and doc (--* options)
     #       Implement as 1 attribute per option, or options = [] ?
     option1 = None
     option2 = None
@@ -208,18 +208,27 @@ class Graph(Component):
     "Graph and print elements definitions (GraphStyle objects)"
     "reflects rrdtool graph [graph elelement ...] [print element ...] options"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
+    def __init__(s, data, style, name=None):
+        #FIXME: how to add options in constructor arguments, one by one or a list ?
+        s.data = data
+        s.style = style
+        if name: s.name = name
     def __str__(s):
+        #FIXME: the DataSource reuse must apply here on data list
         return 'graph %s %s %s %s' % (
             s.name,
-            '', #FIXME: options go here
+            '', #FIXME: options will go here
             ' '.join([str(data) for data in s.data]),
             ' '.join([str(style) for style in s.style]))
 
 class GraphElement(Component):
-    def __str__(s):
-        return '%s:%s' % (
-        s.__class__.__name__,
-        '123')
+    #FIXME: if we choose to use 1 class per graph element,
+    #       we might use the following common string serializer
+    #def __str__(s):
+    #    return '%s:%s' % (
+    #        s.__class__.__name__,
+    #        '123')
+    pass
 
 class GraphData(GraphElement):
     "Base class for graph data definitions classes"
@@ -227,6 +236,13 @@ class GraphData(GraphElement):
     INSTRUCTIONS_TYPES = ['DEF', 'VDEF', 'CDEF']
     instruction = None
     args = []
+    def __init__(s, instruction, args):
+        s.instruction = instruction
+        s.args = args
+    def __str__(s):
+        return '%s:%s' % (
+            s.instruction,
+            ':'.join([str(arg) for arg in s.args]))
 #FIXME: Shall we create 1 class per GraphData element (DEF,CDEF,VDEF) ?
 #       Note that CDEF and VDEF use the RPN
 #class DEF(GraphElement):
@@ -250,6 +266,13 @@ class GraphStyle(GraphElement):
     INSTRUCTIONS_TYPES = ['PRINT','GPRINT','COMMENT','VRULE','HRULE','LINE','AREA','TICK','SHIFT','TEXTALIGN']
     instruction = None
     args = []
+    def __init__(s, instruction, args):
+        s.instruction = instruction
+        s.args = args
+    def __str__(s):
+        return '%s:%s' % (
+            s.instruction,
+            ':'.join([str(arg) for arg in s.args]))
 #FIXME: shall we create 1 class per GraphStyle element ?
 #class PRINT(GraphStyle): pass
 #class GPRINT(GraphStyle): pass

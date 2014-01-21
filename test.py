@@ -15,5 +15,15 @@ d = rrd.Database('test', [ds], [rra], start=920804400)
 #d.rrarchives = [rra]
 print d
 
-g = rrd.Graph()
+d = rrd.RRD('test',
+    [rrd.DataSource('speed', rrd.COUNTER(600))],
+    [rrd.RRA('AVERAGE', 0.5, 1, 24)],
+    start=920804400)
+print d
+
+g = rrd.Graph(
+    #FIXME: Data and Style will be expressed with using their own class
+    [rrd.GraphData('DEF', ['myspeed=test.rrd','speed','AVERAGE'])],
+    [rrd.GraphStyle('LINE2', ['myspeed#FF0000'])]
+)
 print g

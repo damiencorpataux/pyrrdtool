@@ -1,6 +1,7 @@
 #FIXME: turn this into a unit test
 
 import pyrrdtool as rrd
+import pprint as pp
 
 ds = rrd.DataSource('speed', rrd.COUNTER(600))
 print ds
@@ -48,3 +49,7 @@ g = rrd.Graph(
     [rrd.GraphStyle('LINE2', ['myspeed#FF0000'])]
 )
 print g
+
+print
+
+pp.pprint(rrd.info('tests/samples/mini.rrd'))

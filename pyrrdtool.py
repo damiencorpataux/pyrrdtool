@@ -434,15 +434,44 @@ def graph(indicators=[], outfile='-', options=[], data=[]):
     #       or use a options list ? (with default best options)
     pass
 
-def _call():
+def _call(argline):
     "Helper for rrdtool command calls"
-    pass
+    import subprocess
+    cmd = ['rrdtool'] + argline.split()
+    return subprocess.check_output(cmd, shell=False)
     # !! don't use graphing from cli without pipe mode (rrdtool -) !
     #    It will reload fonts cache every time !
     #    Tobi says the way out is to run 'rrdtool -' (pipe mode)
     # Use it from a shared library to avoid reloading fonts cache
     # on every call (does pythonrrd lib do that, is it a shared lib ??)
 
+def info(filename):
+    "Returns a dict from the rrd file metadata information"
+    import re
+    from collections import defaultdict
+    rawdata = _call('info %s' % filename)
+    # Creates dict from 'rrd' data
+    m = re.findall(r'^(\w*?) = \"?(.*)\"?$', rawdata, re.MULTILINE)
+    data = dict(m)
+    # Creates a structured dict out of 'ds' data
+    m = re.findall(r'^ds\[(.*?)\]\.(.*?) = \"?(.*)\"?', rawdata, re.MULTILINE)
+    ds = data['ds'] = defaultdict(dict)
+    for name, key, value in m:
+        ds[name][key] = value
+    # Creates a structured dict out of 'rra' data
+    m = re.findall(r'^rra\[(.*?)\]\.(.*?) = \"?(.*)\"?', rawdata, re.MULTILINE)
+    rra = data['rra'] = defaultdict(dict)
+    for name, key, value in m:
+        rra[name][key] = value
+    # Typecast: ds: defaultdict -> dict, rra: defaultdict -> list
+    data['ds'] = dict(ds)
+    data['rra'] = [rra[str(i)] for i in range(len(rra))] # assumes rra key are contiguous,
+                                             # will raise an error if not the case
+    #FIXME: Convert 0,0000000000e+00 values to float ?
+    #FIXME: Convert NaN values to float('nan') ?
+    return data
+
+#FIXME: superseded by class Variable, remove this
 def datasources():
     "Test implementation to collect existing Datasources objects"
     #FIXME: return a list of Variable objects ?

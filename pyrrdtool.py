@@ -71,6 +71,19 @@ class Database(Component):
     def filename(s):
         "Returns the database filename"
         return s.name + '.rrd' #FIXME: use os.path
+    def apply_config(s, dict_config):
+        d = dict_config
+        s.start = d.start
+        s.step = d.step
+        #...
+        for name ,config in d.ds.items():
+            #FIXME: implement DST.factory(), or/and DS.factory ?
+            pass
+            #ds = DataSource(
+            #    name,
+            #    DataSourceType.factory(config['type'], **config) #config.min/max:NaN becomes 'U'
+            #)
+    #FIXME: remove load() ?
     def load(s, filename):
         "Creates a database object from the given filename (eg. test.rrd)"
         "along with the DataSource and RoundRobinArchive objects"
@@ -146,6 +159,8 @@ class DataSource(Component):
         return "DS:%s:%s" % (s.name, s.type)
 
 class DataSourceType(Component):
+    #FIXME: we could make a factory with it ?
+    #       DST.factory('AVERAGE', **kwargs) ?
     "Represents a datasource type and options used by DataSource"
     "Command line equivalent is DST:arg1:arg2:..."
     TYPES = ['GAUGE', 'COUNTER', 'DERIVE', 'ABSOLUTE', 'COMPUTE']

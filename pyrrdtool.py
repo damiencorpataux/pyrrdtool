@@ -15,8 +15,11 @@
 #    and create a, say, fDEF class (a facade) that handles a Variable and
 #    creates a DEF object, able to output the cli args.
 #    This will be better for clarity, understanding, testing and debugging.
+#    (done for DEF, ongoing for all others)
 # - Reuse the cli doc option definitions in classes variables doc
 #   (with useful links to rrdtool apidoc?)
+# - Check definition classes variables default values,
+#   some might not be None but float('nan') (cf. rrdtool info and RRD.apply()) 
 # - Turn the test.py into a UnitTest
 #
 # Global TODOs:

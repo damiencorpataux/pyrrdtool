@@ -43,7 +43,7 @@ g = rrd.Graph(
     #FIXME: Data and Style will be expressed with using their own class
 #    [rrd.GraphData('DEF', ['myspeed=test.rrd','speed','AVERAGE'])],
     [
-        rrd.DEF(ds), #FIXME: find way to specify which CF
+        rrd.eDEF(ds), #FIXME: find way to specify which CF
     ],
     #FIXME: same as Data
     [rrd.GraphStyle('LINE2', ['myspeed#FF0000'])]

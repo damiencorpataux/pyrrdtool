@@ -38,8 +38,6 @@ class Component():
 class Database(Component):
     "Represents a rrd database file with its DSes and RRAs"
     "and reflects the rrd create command options."
-    "This class is used by the create() command and is reused"
-    "for fetch() and graph()"
     name = None
     "Name of the database (ie. {name}.rrd file)"
     _datasources = [] #FIXME: shall it be the object or the object.name string, or both ?
@@ -300,10 +298,31 @@ class GraphData(GraphElement):
         return '%s:%s' % (
             s.instruction,
             ':'.join([str(arg) for arg in s.args]))
-#FIXME: Shall we create 1 class per GraphData element (DEF,CDEF,VDEF) ?
-#       Note that CDEF and VDEF use the RPN
 class DEF(GraphElement):
     vname = None
+    rrdfile = None
+    ds_name = None
+    cf = None
+    "Consolidation function name. Values: AVERAGE|MIN|MAX|LAST"
+    step = None
+    start = None
+    end = None
+    reduce = None
+    def __init__(s, vname, rrdfile, ds_name, cf, step=None, start=None, end=None, reduce=None):
+        s.vname = vname
+        s.rrdfile = rrdfile
+        s.ds_name = ds_name
+        s.cf = cf
+        if step: s.step = step
+        if start: s.start = start
+        if end: s.end = end
+        if reduce: s.reduce = reduce
+    def __str__(s):
+        #FIXME: add remaining args: s.step, s.start, s.end, s.reduce
+        return '%s:%s=%s:%s:%s' % (
+            'DEF', #s.__class__.__name__,
+            s.vname, s.rrdfile, s.ds_name, s.cf)
+class eDEF(GraphElement):
     #FIXME: there is something to do with /reuse/ of DataSources config here
     #       -> yes, the concept of Variable (or Indicator?)
     variable = None
@@ -315,13 +334,11 @@ class DEF(GraphElement):
     reduce = None
     def __init__(s, variable):
        s.variable = variable
-       #s.vname = variable.name #vname is contained in s.variable.vname
+       #FIXME: add remaining constructor args (as in DEF)
     def __str__(s):
-        return '%s:%s=%s:%s:%s' % (
-            'DEF', #s.__class__.__name__,
-            s.variable.vname, s.variable.rrd.filename(), s.variable.ds.name,
+        return str(DEF(s.variable.vname, s.variable.rrd.filename(), s.variable.ds.name,
             #FIXME: arbitratily uses the first available RRA
-            s.variable.rra[0].consolidation)
+            s.variable.rra[0].consolidation))
 #class CDEF(GraphElement):
 #    vname = None
 #    rpn = []

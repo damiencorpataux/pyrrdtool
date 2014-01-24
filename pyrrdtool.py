@@ -72,18 +72,19 @@ class Database(Component):
     def filename(s):
         "Returns the database filename"
         return s.name + '.rrd' #FIXME: use os.path
-    def apply_config(s, dict_config):
-        d = dict_config
-        s.start = d.start
-        s.step = d.step
+    def apply(s, config):
+        "Applies the given config dictionary (as returned by info())"
+        #print config
+        if (config.get('start')): s.start = config.get('start')
+        s.step = config.get('step')
         #...
-        for name ,config in d.ds.items():
+        for name,config in config.get('ds').items():
             #FIXME: implement DST.factory(), or/and DS.factory ?
             pass
-            #ds = DataSource(
-            #    name,
-            #    DataSourceType.factory(config['type'], **config) #config.min/max:NaN becomes 'U'
-            #)
+            ds = DataSource(
+                name,
+                factory(config.get('type'), **config) #config.min/max:NaN becomes 'U'
+            )
     #FIXME: remove load() ?
     def load(s, filename):
         "Creates a database object from the given filename (eg. test.rrd)"
@@ -469,6 +470,46 @@ def graph(indicators=[], outfile='-', options=[], data=[]):
     #       or use a options list ? (with default best options)
     pass
 
+def info_raw(filename):
+    "Returns a dict from the rrd file raw meta-information"
+    import re
+    from collections import defaultdict
+    rawdata = _call('info %s' % filename)
+    # Creates dict from 'rrd' data
+    m = re.findall(r'^(\w*?) = (.*)$', rawdata, re.MULTILINE)
+    data = dict(m)
+    # Creates a structured dict out of 'ds' data
+    m = re.findall(r'^ds\[(.*?)\]\.(.*?) = (.*)$', rawdata, re.MULTILINE)
+    ds = data['ds'] = defaultdict(dict)
+    for name, key, value in m:
+        ds[name][key] = value
+    # Creates a structured dict out of 'rra' data
+    m = re.findall(r'^rra\[(.*?)\]\.(.*?) = (.*)$', rawdata, re.MULTILINE)
+    rra = data['rra'] = defaultdict(dict)
+    for name, key, value in m:
+        rra[name][key] = value
+    # Typecast: ds: defaultdict -> dict, rra: defaultdict -> list
+    data['ds'] = dict(ds)
+    data['rra'] = [rra[str(i)] for i in range(len(rra))] # assumes rra key
+                     # are contiguous, will raise an error if not the case
+    return data
+
+def info(filename):
+    "Returns a dict from the rrd file meta-information"
+    "containing a subset of meaningful content and values"
+    def clean(info):
+        # Strips quotes (") from values
+        #FIXME: Clean 'cdp_prep[0]' keys in rra list items
+        #FIXME: Convert 0,0000000000e+00 values to float ?
+        #FIXME: Convert NaN values to float('nan') ? or 'U' ? which is most meaningful
+        for k in info:
+            if type(info[k]) == list: info[k] = [clean(i) for i in info[k]]
+            elif type(info[k]) == dict: clean(info[k])
+            else: info[k] = info[k].strip('"')
+        return info
+    # Translates values
+    return clean(info_raw(filename))
+
 def _call(argline):
     "Helper for rrdtool command calls"
     import subprocess
@@ -480,31 +521,13 @@ def _call(argline):
     # Use it from a shared library to avoid reloading fonts cache
     # on every call (does pythonrrd lib do that, is it a shared lib ??)
 
-def info(filename):
-    "Returns a dict from the rrd file metadata information"
-    import re
-    from collections import defaultdict
-    rawdata = _call('info %s' % filename)
-    # Creates dict from 'rrd' data
-    m = re.findall(r'^(\w*?) = \"?(.*)\"?$', rawdata, re.MULTILINE)
-    data = dict(m)
-    # Creates a structured dict out of 'ds' data
-    m = re.findall(r'^ds\[(.*?)\]\.(.*?) = \"?(.*)\"?', rawdata, re.MULTILINE)
-    ds = data['ds'] = defaultdict(dict)
-    for name, key, value in m:
-        ds[name][key] = value
-    # Creates a structured dict out of 'rra' data
-    m = re.findall(r'^rra\[(.*?)\]\.(.*?) = \"?(.*)\"?', rawdata, re.MULTILINE)
-    rra = data['rra'] = defaultdict(dict)
-    for name, key, value in m:
-        rra[name][key] = value
-    # Typecast: ds: defaultdict -> dict, rra: defaultdict -> list
-    data['ds'] = dict(ds)
-    data['rra'] = [rra[str(i)] for i in range(len(rra))] # assumes rra key are contiguous,
-                                             # will raise an error if not the case
-    #FIXME: Convert 0,0000000000e+00 values to float ?
-    #FIXME: Convert NaN values to float('nan') ?
-    return data
+def factory(classname, *args, **kwargs):
+    "Static factory method"
+    #FIXME: get the classname.__init__() arguments using
+    #       import inspect; print(inspect.getargspec(the_function)), and remove
+    #       kwargs keys that are not expected by classname.__init__()
+    return globals()[classname](*args, **kwargs)
+
 
 #FIXME: superseded by class Variable, remove this
 def datasources():

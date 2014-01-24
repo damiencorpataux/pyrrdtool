@@ -52,4 +52,8 @@ print g
 
 print
 
-pp.pprint(rrd.info('tests/samples/mini.rrd'))
+pp.pprint(rrd.info_raw('tests/samples/mini.rrd'))
+print
+info = rrd.info('tests/samples/mini.rrd')
+pp.pprint(info)
+d.apply(info)

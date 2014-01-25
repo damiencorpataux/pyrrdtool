@@ -285,11 +285,13 @@ class Graph(Component):
     name = '-'
     #FIXME: Reuse cli options names and doc (--* options)
     #       Implement as 1 attribute per option, or options = [] ?
-    options = {
+    args = {
         'imgformat': None,
-        "Values': PNG|SVG|EPS|PDF"
-        'no-rrdtool-tag': True,
+        #Values: PNG|SVG|EPS|PDF
+        'disable-rrdtool-tag': True,
         "Hides Tobis credits"
+        'color': {},
+        "Graph elements colors (eg. {'CANVAS':'ffaa00', 'GRID':'cc00cc'}" 
         'option2': None,
         'option3': None,
     }
@@ -308,10 +310,12 @@ class Graph(Component):
         s.style = style
         if name: s.name = name
     def __str__(s):
-        #FIXME: the DataSource reuse must apply here on data list
+        def f(arg, value):
+            return '--%s'%arg if type(value)==bool else '--%s %s'%(arg, value)
+        args = [f(arg, s.args.get(arg)) for arg in s.args if s.args.get(arg)]
         return 'graph %s %s %s %s' % (
             s.name,
-            '', #FIXME: options will go here
+            ' '.join(args),
             ' '.join([str(data) for data in s.data]),
             ' '.join([str(style) for style in s.style]))
     def draw(s):

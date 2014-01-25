@@ -87,3 +87,6 @@ print g
 
 print; print "# Graph binary"
 g.draw()
+g.name = 'g.png'
+print g
+g.draw()

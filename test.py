@@ -7,10 +7,12 @@ print; print "# Atomic objects instanciation, parametrization and composition"
 
 ds = rrd.DataSource('speed', rrd.COUNTER(600))
 pp.pprint(ds)
+print ds
 
 #rra = rrd.RRA() # alias of rrd.RoundRobinArchive()
 rra = rrd.RRA('AVERAGE', 0.5, 1, 24)
 #rra = rrd.RRA(rra.AVERAGE(0.5, 1, 24))
+pp.pprint(ds)
 print rra
 
 d = rrd.Database('test', [ds], [rra], start=920804400)
@@ -18,6 +20,7 @@ d = rrd.Database('test', [ds], [rra], start=920804400)
 #d.start = 920804400
 #d.datasources = [ds]
 #d.rrarchives = [rra]
+pp.pprint(d)
 print d
 
 
@@ -32,22 +35,24 @@ d = rrd.RRD('test',
     ],
     [rrd.RRA('AVERAGE', 0.5, 1, 24)],
     start=920804400)
+pp.pprint(d)
 print d
 
 
-print; print "# Database metareading"
+print; print "# Database metainfo parsing from rrd file"
 #pp.pprint(rrd.info_raw('tests/samples/mini.rrd'))
 #pp.pprint(rrd.info('tests/samples/mini.rrd'))
 info = rrd.info('tests/samples/two-datasources.rrd')
 pp.pprint(info)
 d2 = rrd.Database.create(info)
+pp.pprint(d2)
 print d2
-#pp.pprint(d2)
 
 
 print; print "# Variable extraction from Database obejct"
 speed = rrd.Variable(d2, 'speed')
-print speed
+pp.pprint(speed)
+print speed.__dict__
 
 
 print; print "# Base styling components instanciation and parametrization"
@@ -66,16 +71,15 @@ print rrd.LINE.from_variable(speed, {'color':'ff0000'})
 
 
 print; print "# Whole graph command generation"
-g = rrd.Graph(
-    [
-        rrd.DEF.from_variable(speed), #FIXME: find way to specify which CF (from available
-                      #       CFs in rra, or take first found as default ?
-    ],
-    [
-        #rrd.GraphStyle('LINE2', ['myspeed#FF0000']),
-        rrd.LINE.from_variable(speed, {'width':2, 'color': 'aacc00'})
-    ]
-)
+d2 = rrd.Database.create(rrd.info('tests/samples/two-datasources.rrd'))
+speed = rrd.Variable(d2, 'speed')
+g = rrd.Graph([
+    rrd.DEF.from_variable(speed), #FIXME: find way to specify which CF (from available
+                  #       CFs in rra, or take first found as default ?
+], [
+    #rrd.GraphStyle('LINE2', ['myspeed#FF0000']),
+    rrd.LINE.from_variable(speed, {'width':2, 'color': 'aacc00'})
+])
 print g
 
 

@@ -26,16 +26,18 @@
 # - Turn the test.py into a UnitTest
 #
 # Global TODOs:
-# - Separate lib into pyrrdtool.data and . graph ?
-#   for better readability ?
-# - OK Every class must have its .create(config),
-#   so that everybody know how to parse its related config object.
-#   just like databse.
 # - Create the concept of GraphTemplate():
 #   takes a DataSource as argument and applies a predefined template
 #   to this datasource. Returning a set of graph data and style
 #   to be fed directly to the Graph(Component).
 #   But maybe in a super-module
+# - Apply GraphTemplate to make it easy to eg. 'flamestyle' a graph
+#   flamestyle http://old.ed.zehome.com/?page=rrdtool2
+# - Separate lib into pyrrdtool.data and . graph ?
+#   for better readability ?
+# - OK Every class must have its .create(config),
+#   so that everybody know how to parse its related config object.
+#   just like databse.
 
 
 # Below are classes that are reused across pyrrdtool components
@@ -364,18 +366,18 @@ class eDEF(GraphElement):
     #       -> yes, the concept of Variable (or Indicator?)
     variable = None
     "Variable definition object, contains vname definition"
-    consolidation = None # Can RRA.consolidation be reused here (through DS.rrd reference, for automatic setting of this variable) ? Or is it autoset by the cli if option is not specified ?
-    step = None # Same as consolidation, with RRD.step through DS.rrd reference too
-    start = None
-    end = None
-    reduce = None
+    element = None
+    "DEF object instance"
     def __init__(s, variable):
        s.variable = variable
+       s.element = DEF(s.variable.vname,
+                       s.variable.rrd.filename(),
+                       s.variable.ds.name,
+                       #FIXME: arbitratily uses the first available RRA
+                       s.variable.rra[0].consolidation)
        #FIXME: add remaining constructor args (as in DEF)
     def __str__(s):
-        return str(DEF(s.variable.vname, s.variable.rrd.filename(), s.variable.ds.name,
-            #FIXME: arbitratily uses the first available RRA
-            s.variable.rra[0].consolidation))
+        return str(s.element)
 class GraphElement_Common():
     vname = None
     rpn = None
@@ -399,6 +401,8 @@ class GraphStyle(GraphElement):
     "Base class for graph print elements classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     INSTRUCTIONS_TYPES = ['PRINT','GPRINT','COMMENT','VRULE','HRULE','LINE','AREA','TICK','SHIFT','TEXTALIGN']
+    def __init__(s, args):
+        s.args = dict(s.args.items() + args.items())
     #FIXME: this will be unused when all graph style instructions are implemented
     #instruction = None
     #args = []
@@ -424,14 +428,9 @@ class LINE(GraphStyle):
         'dashes': None,
         'dashOffset': None
     }
-    def __init__(s, args):
-        s.args = dict(s.args.items() + args.items())
     def __str__(s):
         # LINE[width]:value[#color][:[legend][:STACK][:skipscale][:dashes[=on_s[,off_s[,on_s,off_s]...]][:dash-offset=offset]]
-        order = ['width', 'value', 'color', 'legend', 'STACK', 'skipscale', 'dashes', 'dashOffset']
-        #print {k:s.args.get(k) for k in order if s.args.get(k)}
-        def f(arg, value):
-            return {
+        f = lambda arg, value: {
                 'width': '%s' % value,
                 'value': ':%s' % value, # mandatory
                 'color': '#%s' % value,
@@ -440,13 +439,44 @@ class LINE(GraphStyle):
                 'skipscale': 'skipscale',
                 'dashes': ':dashes=%s' % value,
                 'dashOffset': ':dashes-offset=%s' % value,
-            }[arg] if value else '' #FIXME: attention, falsy values
-        
-        #print reduce(lambda string, arg: string+','+arg+'!', order)
-        #print reduce(lambda string, arg: string + str(s.args[arg]), order, '')
-        print reduce(lambda string, arg: string + f(arg, s.args.get(arg)), order, '')
-        return ''
-        return 'LINE%s' % 0
+            }[arg]# if value else '' #FIXME: attention, falsy values
+        order = ['width', 'value', 'color', 'legend', 'STACK', 'skipscale', 'dashes', 'dashOffset']
+        #return reduce(lambda string, arg: string + f(arg, s.args.get(arg)), order, '')
+        return s.__class__.__name__+reduce(
+            lambda x, y: x + y,
+            [f(arg, s.args.get(arg)) for arg in order if s.args.get(arg)])
+class eLINE(GraphElement):
+    variable = None
+    line = None
+    def __init__(s, variable, args={}):
+        s.variable = variable
+        s.line = LINE(dict({
+            'value': s.variable.vname
+        }.items() + args.items()))
+    def __str__(s):
+        return str(s.line)
+    
+class AREA(GraphStyle):
+    args = {
+        'value':  None,
+        'color':  None,
+        'legend': None,
+        'STACK': None,
+        'skipscale': None
+    }
+    def __str__(s):
+        # AREA:value[#color][:[legend][:STACK][:skipscale]]
+        f = lambda arg, value: {
+            'value': ':%s' % value,
+            'color': '#%s' % value,
+            'legend': ':%s' % value,
+            'STACK' : 'STACK',
+            'skipscale': 'skipscale'
+        }[arg]
+        order = ['value', 'color', 'legend', 'STACK', 'skipscale']
+        return s.__class__.__name__+reduce(
+            lambda x, y: x + y,
+            [f(arg, s.args.get(arg)) for arg in order if s.args.get(arg)])
 #class PRINT(GraphStyle):
 #    vname = None
 #    format = None
@@ -470,12 +500,6 @@ class LINE(GraphStyle):
 #class HRULE(VHRULE):
 #    p = 'value'
 #    value = None
-#class AREA(GraphStyle):
-#    value = None
-#    color = None
-#    legend = None
-#    STACK = None
-#    skipscale = None
 #class TICK(GraphStyle):
 #    vname = None
 #    color = None

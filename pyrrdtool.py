@@ -71,9 +71,9 @@ class Variable(Component): #or Indicator ?
     vname = None
     "Virtual name of the datasouce, used by graph components"
     "(defaults to ds.name)"
-    #FIME: shall we specify consolidation here, or in DEF.from(v, cf) calls ?
-    #consolidation = None
-    #"Consolidation type to use with this variable"
+    #FIXME: shall we specify consolidation here, or in DEF.from(v, cf) calls ?
+    #cf = None
+    #"Consolidation function to use with this variable"
     #"(must exist in related rra)"
     ds = None
     "Datasource object represented"
@@ -254,26 +254,26 @@ class RoundRobinArchive(Component):
     "Number of pdp represented by a row"
     xff = None
     "The ratio of allowed unknown pdp data per row (xfile factor)"
-    consolidation = None
-    "Consolidation function (cf) name. Values: AVERAGE|MIN|MAX|LAST"
+    cf = None
+    "Consolidation function name. Values: AVERAGE|MIN|MAX|LAST"
     "Used for consolidating a set of PDPs into a rows"
     "The consolidation function to use with the archive"
     "This affects how data is resampled to lower resolutions"
     "and should be chosen according to what you want to track"
     "eg. MIN is you want to track, say, a minimal service level"
-    def __init__(s, consolidation, xff, steps, rows):
-        s.consolidation = consolidation
+    def __init__(s, cf, xff, steps, rows):
+        s.cf = cf
         s.xff = xff
         s.steps = steps
         s.rows = rows
     def __str__(s):
         return 'RRA:%s:%s' % (
-            s.consolidation,
-            ':'.join([str(getattr(s, arg)) for arg in ['xff','steps','rows']]))
+            s.cf,
+            ':'.join([str(getattr(s, arg)) for arg in ['cf', 'xff','steps','rows']]))
     @staticmethod
     def create(config):
         return RoundRobinArchive(
-            consolidation = config.get('cf'),
+            cf = config.get('cf'),
             #FIXME: a parser function should take care of value format conversion
             #       eg. format(value) - note that it formatting has two directions
             xff = float(config.get('xff').replace(',','.')),
@@ -405,7 +405,7 @@ class DEF(GraphData):
             'rrdfile': variable.rrd.filename(),
             'ds_name': variable.ds.name,
             #FIXME: arbitratily uses the first available RRA
-            'cf': variable.rra[0].consolidation
+            'cf': variable.rra[0].cf
             #FIXME: also set remaining args, using config ?
         }
         return DEF(**dict(baseconfig.items() + config.items()))
@@ -602,7 +602,9 @@ def _call(argline):
         stdout=subprocess.PIPE, 
         stderr=subprocess.PIPE)
     out, err = process.communicate()
-    #print err
+    #FIXME: Tobi says that rrdtool doesn't output an exit status,
+    #       does it streams to stderr ?
+    if (err): raise(err)
     return out
     # !! don't use graphing from cli without pipe mode (rrdtool -) !
     #    It will reload fonts cache every time !

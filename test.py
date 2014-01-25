@@ -84,9 +84,8 @@ print g
 
 
 print; print "# Graph binary"
-g.draw()
+#print g.draw()
 
 g.name = 'g.png'
 g.args['border'] = '0'
 print g
-g.draw()

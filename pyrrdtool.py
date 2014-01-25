@@ -90,7 +90,8 @@ class Database(Component):
     "Name of the database (ie. {name}.rrd file)"
     _datasources = [] #FIXME: shall it be the object or the object.name string, or both ?
     "DataSource definitions (objects)"
-    #FIXME: getter/setter not working properly
+    #FIXME: getter/setter not working properly,
+    #       but superseded by class Variable
     @property
     def datasources(s):
         return s._datasources
@@ -135,7 +136,9 @@ class Database(Component):
         "(as returned by info())"
         import os
         return Database(
-            name = os.path.splitext(os.path.basename(config.get('filename')))[0],
+            #name = os.path.splitext(os.path.basename(config.get('filename')))[0],
+            #FIXME: keep filename path
+            name = os.path.splitext(config.get('filename'))[0],
             ds = [DS.create(name, c) for name,c in config.get('ds').items()],
             rra = [RRA.create(c) for c in config.get('rra')],
             start = config.get('start'),
@@ -311,6 +314,10 @@ class Graph(Component):
             '', #FIXME: options will go here
             ' '.join([str(data) for data in s.data]),
             ' '.join([str(style) for style in s.style]))
+    def draw(s):
+        "Returns the graph binary"
+        #FIXME: handle options (imageformat, etc.)
+        return _call(str(s))
 
 class GraphElement(Component):
     #FIXME: if we choose to use 1 class per graph element,
@@ -569,9 +576,18 @@ def info(filename):
 
 def _call(argline):
     "Helper for rrdtool command calls"
-    import subprocess
     cmd = ['rrdtool'] + argline.split()
-    return subprocess.check_output(cmd, shell=False)
+    #import subprocess
+    #return subprocess.check_output(cmd, shell=False)
+    #FIXME
+    import subprocess
+    process = subprocess.Popen(cmd,
+        shell=False,
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE)
+    out, err = process.communicate()
+    #print err
+    return out
     # !! don't use graphing from cli without pipe mode (rrdtool -) !
     #    It will reload fonts cache every time !
     #    Tobi says the way out is to run 'rrdtool -' (pipe mode)

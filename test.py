@@ -83,3 +83,7 @@ g = rrd.Graph(
     ]
 )
 print g
+
+
+print; print "# Graph binary"
+g.draw()

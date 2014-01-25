@@ -319,10 +319,12 @@ class GraphElement(Component):
     #        '123')
     pass
 
+# Below are graph data classes
 class GraphData(GraphElement):
     "Base class for graph data definition classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_data.en.html"
     INSTRUCTIONS_TYPES = ['DEF', 'VDEF', 'CDEF']
+#FIXME: this is not used anymore, remove it
     instruction = None
     args = []
     def __init__(s, instruction, args):
@@ -392,23 +394,59 @@ class CDEF(GraphElement_Common):
 class VDEF(GraphElement_Common):
     pass
 
+# Below are graph style classes
 class GraphStyle(GraphElement):
     "Base class for graph print elements classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     INSTRUCTIONS_TYPES = ['PRINT','GPRINT','COMMENT','VRULE','HRULE','LINE','AREA','TICK','SHIFT','TEXTALIGN']
-    instruction = None
-    args = []
-    def __init__(s, instruction, args):
-        s.instruction = instruction
-        s.args = args
-    def __str__(s):
-        return '%s:%s' % (
-            s.instruction,
-            ':'.join([str(arg) for arg in s.args]))
+    #FIXME: this will be unused when all graph style instructions are implemented
+    #instruction = None
+    #args = []
+    #def __init__(s, instruction, args):
+    #    s.instruction = instruction
+    #    s.args = args
+    #def __str__(s):
+    #    return '%s:%s' % (
+    #        s.instruction,
+    #        ':'.join([str(arg) for arg in s.args]))
 #FIXME: shall we create 1 class per GraphStyle element ?
 #NOTE: some common factors:
 # a. legend, color
 # b. dashes, dashes-offset
+class LINE(GraphStyle):
+    args = {
+        'width': None,
+        'value': None,
+        'color': None,
+        'legend': None,
+        'STACK': None,
+        'skipscale': None,
+        'dashes': None,
+        'dashOffset': None
+    }
+    def __init__(s, args):
+        s.args = dict(s.args.items() + args.items())
+    def __str__(s):
+        # LINE[width]:value[#color][:[legend][:STACK][:skipscale][:dashes[=on_s[,off_s[,on_s,off_s]...]][:dash-offset=offset]]
+        order = ['width', 'value', 'color', 'legend', 'STACK', 'skipscale', 'dashes', 'dashOffset']
+        #print {k:s.args.get(k) for k in order if s.args.get(k)}
+        def f(arg, value):
+            return {
+                'width': '%s' % value,
+                'value': ':%s' % value, # mandatory
+                'color': '#%s' % value,
+                'legend': ':%s' % value,
+                'STACK': 'STACK', #FIXME: use lowercase for key ?
+                'skipscale': 'skipscale',
+                'dashes': ':dashes=%s' % value,
+                'dashOffset': ':dashes-offset=%s' % value,
+            }[arg] if value else '' #FIXME: attention, falsy values
+        
+        #print reduce(lambda string, arg: string+','+arg+'!', order)
+        #print reduce(lambda string, arg: string + str(s.args[arg]), order, '')
+        print reduce(lambda string, arg: string + f(arg, s.args.get(arg)), order, '')
+        return ''
+        return 'LINE%s' % 0
 #class PRINT(GraphStyle):
 #    vname = None
 #    format = None
@@ -432,15 +470,6 @@ class GraphStyle(GraphElement):
 #class HRULE(VHRULE):
 #    p = 'value'
 #    value = None
-#class LINE(GraphStyle):
-#    width = None
-#    value = None
-#    color = None
-#    legend = None
-#    STACK = None
-#    skipscale = None
-#    dahses = None
-#    dashOffset = None
 #class AREA(GraphStyle):
 #    value = None
 #    color = None

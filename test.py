@@ -22,9 +22,6 @@ print d
 
 
 print "(one round database instance definition)"
-#FIXME: Quickly implement a database loading function to create a
-#       database object fully configured by using rddtool info file.rrd
-#       this is neat! for quickly drawing graphs !
 #FIXME: And then create an json api to explore arbitrary rrd files definitions
 #       showing their DSes/DST, RRAs config
 #       and even a overview of the data using rrdtool fetch
@@ -60,26 +57,23 @@ print rrd.AREA({'width':2, 'value':'VNAME', 'color': 'ffaacc', 'dashes': 'abc'})
 
 print; print "# Graph data component test"
 speed = rrd.Variable(d2, 'speed')
-print rrd.eDEF(speed)
+print rrd.DEF.from_variable(speed)
 
 
 print; print "# Variable styling components test"
-print rrd.eLINE(speed)
-print rrd.eLINE(speed, {'color':'ff0000'})
+print rrd.LINE.from_variable(speed)
+print rrd.LINE.from_variable(speed, {'color':'ff0000'})
 
 
 print; print "# Whole graph command generation"
 g = rrd.Graph(
-    #FIXME: Data and Style will be expressed with using their own class
-#    [rrd.GraphData('DEF', ['myspeed=test.rrd','speed','AVERAGE'])],
     [
-        rrd.eDEF(speed), #FIXME: find way to specify which CF (from available
+        rrd.DEF.from_variable(speed), #FIXME: find way to specify which CF (from available
                       #       CFs in rra, or take first found as default ?
     ],
-    #FIXME: same as Data
     [
-        #rrd.GraphStyle('LINE2', ['myspeed#FF0000'])
-        rrd.eLINE(speed, {'width':2, 'color': 'aacc00'})
+        #rrd.GraphStyle('LINE2', ['myspeed#FF0000']),
+        rrd.LINE.from_variable(speed, {'width':2, 'color': 'aacc00'})
     ]
 )
 print g

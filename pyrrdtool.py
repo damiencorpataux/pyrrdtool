@@ -16,14 +16,22 @@
 #    but this make __doc__ the options impossible :(
 #    This will ease a lot the factory implementation
 #    -> so it is not an argument anymore :)
-# 2. Keep the eg. DEF class to be constructed with plain arguments
-#    and create a, say, fDEF class (a facade) that handles a Variable and
-#    creates a DEF object, able to output the cli args.
-#    This will be better for clarity, understanding, testing and debugging.
-#    (done for DEF, ongoing for all others)
-#    -> make it neat between DEF and eDEF:
-#    remove the eDEF class, and create a DEF.from(variable, config)
-#    as well as LINE.from(variable, config), etc.
+#    Options dict:
+#    PROs: easier to iter (no getattr()), easier to get keys (no class prop clobber)
+#    CONs: harder to document (no __doc__ for dicts)
+#    Alternatives:
+#    - options dict: there's a args dict the defines args names and default values,
+#      it makes easy to iterate the dict to generate args
+#      it makes easy to merge default options dict with given options dict
+#    - kwargs: there's a args_order list that defines
+#      (1) arguments names (for finding rddtool args amongst class vars) and default values
+#      (2) the order of args (already present, and needed by opt dicts too, see __str__)
+#      and there's a get_args() function that returns args dict from class vars
+#      this way we can still documents args using class vars __doc__
+#      -> but can we merge easily the given args (as easy as dict) ?
+# 2. DEF- & LINE.from_template show that the __init__ signature of their
+#    respective class differs: the 1st is kwargs, the 2nd is {options_dict}
+#    This is linked to 1. - so decide.
 # - Reuse the cli doc option definitions in classes variables doc
 #   (with useful links to rrdtool apidoc?)
 # - Check definition classes variables default values,
@@ -48,6 +56,8 @@
 # Below are classes that are reused across pyrrdtool components
 class Component():
     "Base class for all pyrrdtool classes"
+    #FIXME: shall we implement options merging here,
+    #       automatic or explicitely called by subclasses ?
     pass
 
 #NOTE: Variable class meant to abstract the DataSource and RRA concepts,
@@ -58,14 +68,19 @@ class Component():
 #       is it a good idea?
 class Variable(Component): #or Indicator ?
     "Links a DataSource and a Database, and abstracts rrdtool internals"
-    #FIXME: weakref module could be used to keep refs
-    #       noooo, no need, simply say s.datasource = ds
     vname = None
     "Virtual name of the datasouce, used by graph components"
     "(defaults to ds.name)"
+    #FIME: shall we specify consolidation here, or in DEF.from(v, cf) calls ?
+    #consolidation = None
+    #"Consolidation type to use with this variable"
+    #"(must exist in related rra)"
     ds = None
+    "Datasource object represented"
     rrd = None
+    "Related Database object"
     rra = []
+    "Related RoundRobinDatabase objects list"
     def __init__(s, rrd, ds_name, vname=None):
         "Creates a Variable from a Database and a datasource name"
         "The Variable class is meta to rrdtool; it allows to reuse"
@@ -78,7 +93,6 @@ class Variable(Component): #or Indicator ?
         s.rrd = rrd
         s.rra = rrd.rrarchives
         s.vname = vname if vname else ds.name
-        
 
 #FIXME: Keep this for the pyrrd super-module, that provides more complex features.
 #class StyleTemplate(Component):
@@ -87,7 +101,7 @@ class Variable(Component): #or Indicator ?
 #    def __init__(s, ds):
 #        pass
 
-
+# RRD tool abstraction classes
 class Database(Component):
     "Represents a rrd database file with its DSes and RRAs"
     "and reflects the rrd create command options."
@@ -347,29 +361,17 @@ class Graph(Component):
         return _call(str(s))
 
 class GraphElement(Component):
-    #FIXME: if we choose to use 1 class per graph element,
-    #       we might use the following common string serializer
+    #FIXME: we might use the following common string serializer
     #def __str__(s):
     #    return '%s:%s' % (
     #        s.__class__.__name__,
-    #        '123')
+    #        '...')
     pass
 
 # Below are graph data classes
 class GraphData(GraphElement):
     "Base class for graph data definition classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_data.en.html"
-    INSTRUCTIONS_TYPES = ['DEF', 'VDEF', 'CDEF']
-    #FIXME: this is not used anymore, remove it
-    #instruction = None
-    #args = []
-    #def __init__(s, instruction, args):
-    #    s.instruction = instruction
-    #    s.args = args
-    #def __str__(s):
-    #    return '%s:%s' % (
-    #        s.instruction,
-    #        ':'.join([str(arg) for arg in s.args]))
 class DEF(GraphData):
     vname = None
     rrdfile = None
@@ -394,24 +396,19 @@ class DEF(GraphData):
         return '%s:%s=%s:%s:%s' % (
             'DEF', #s.__class__.__name__,
             s.vname, s.rrdfile, s.ds_name, s.cf)
-class eDEF(GraphElement):
-    #FIXME: DEF is DEF_Base, eDEF is DEF and contains an instance of DEF_Base
-    #FIXME: there is something to do with /reuse/ of DataSources config here
-    #       -> yes, the concept of Variable (or Indicator?)
-    variable = None
-    "Variable definition object, contains vname definition"
-    element = None
-    "DEF object instance"
-    def __init__(s, variable):
-       s.variable = variable
-       s.element = DEF(s.variable.vname,
-                       s.variable.rrd.filename(),
-                       s.variable.ds.name,
-                       #FIXME: arbitratily uses the first available RRA
-                       s.variable.rra[0].consolidation)
-    #FIXME: add remaining constructor args (as in DEF)
-    def __str__(s):
-        return str(s.element)
+    @staticmethod
+    def from_variable(variable, config={}):
+        "Creates and returns an instance from the given variable and config"
+        #FIXME: define what is config
+        baseconfig = {
+            'vname': variable.vname,
+            'rrdfile': variable.rrd.filename(),
+            'ds_name': variable.ds.name,
+            #FIXME: arbitratily uses the first available RRA
+            'cf': variable.rra[0].consolidation
+            #FIXME: also set remaining args, using config ?
+        }
+        return DEF(**dict(baseconfig.items() + config.items()))
 class GraphData_Common():
     vname = None
     rpn = None
@@ -443,16 +440,6 @@ class GraphStyle(GraphElement):
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     def __init__(s, args):
         s.args = dict(s.args.items() + args.items())
-    #FIXME: this will be unused when all graph style instructions are implemented
-    #instruction = None
-    #args = []
-    #def __init__(s, instruction, args):
-    #    s.instruction = instruction
-    #    s.args = args
-    #def __str__(s):
-    #    return '%s:%s' % (
-    #        s.instruction,
-    #        ':'.join([str(arg) for arg in s.args]))
 #FIXME: shall we create 1 class per GraphStyle element ?
 #NOTE: some common factors:
 # a. legend, color
@@ -487,16 +474,10 @@ class LINE(GraphStyle):
         return s.__class__.__name__+reduce(
             lambda x, y: x + y,
             [f(arg, s.args.get(arg)) for arg in order if s.args.get(arg)])
-class eLINE(GraphElement):
-    variable = None
-    line = None
-    def __init__(s, variable, args={}):
-        s.variable = variable
-        s.line = LINE(dict({
-            'value': s.variable.vname
-        }.items() + args.items()))
-    def __str__(s):
-        return str(s.line)
+    @staticmethod
+    def from_variable(variable, config={}):
+        baseconfig = { 'value': variable.vname }
+        return LINE(dict(baseconfig.items() + config.items()))
     
 class AREA(GraphStyle):
     args = {
@@ -676,38 +657,6 @@ def _call(argline):
 #    #FIXME: Shall we enumerate all (20+) cli options in the fn signature
 #    #       or use a options list ? (with default best options)
 #    pass
-
-#FIXME: superseded by .create() static functions
-#def factory(classname, *args, **kwargs):
-#    "Static factory method"
-#    #FIXME: superseded by Component.create
-#    #FIXME: get the classname.__init__() arguments using
-#    #       import inspect; print(inspect.getargspec(the_function)), and remove
-#    #       kwargs keys that are not expected by classname.__init__()
-#    cls = globals()[classname]
-#    import inspect
-#    print inspect.getargspec(cls.__init__)
-#    print 
-#    print args, kwargs
-#    return globals()[classname](*args, **kwargs)
-
-
-#FIXME: superseded by class Variable, remove this
-#def datasources():
-#    "Test implementation to collect existing Datasources objects"
-#    #FIXME: return a list of Variable objects ?
-#    #FIXME: the DataSource should really be added its rrd & rra references list
-#    #       it would make it so easy to use (eg. add a whole RRD.datasources to a graph!)
-#    #       but it is a short round towards that goal
-#    import gc
-#    datasources = {}
-#    for rrd in gc.get_objects():
-#        if isinstance(rrd, Database):
-#            for ds in rrd.datasources:
-#                ds._rrd = rrd
-#                ds._rra = rrd.rrarchives
-#                datasources[ds.name] = ds
-#    return datasources
 
 # Below are definition import/export functions
 # This might be another piece of software (standalone or with webview)

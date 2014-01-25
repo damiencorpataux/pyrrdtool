@@ -27,7 +27,10 @@ print
 #       showing their DSes/DST, RRAs config
 #       and even a overview of the data using rrdtool fetch
 d = rrd.RRD('test',
-    [rrd.DataSource('speed', rrd.COUNTER(600))],
+    [
+        rrd.DataSource('speed', rrd.COUNTER(600)),
+        rrd.DataSource('speed_max', rrd.COMPUTE('speed,MAX')),
+    ],
     [rrd.RRA('AVERAGE', 0.5, 1, 24)],
     start=920804400)
 print d
@@ -52,8 +55,12 @@ print g
 
 print
 
-pp.pprint(rrd.info_raw('tests/samples/mini.rrd'))
+#pp.pprint(rrd.info_raw('tests/samples/two-datasources.rrd'))
 print
-info = rrd.info('tests/samples/mini.rrd')
+info = rrd.info('tests/samples/two-datasources.rrd')
 pp.pprint(info)
-d.apply(info)
+
+d2 = rrd.Database.create(info)
+#pp.pprint(d2)
+print d2
+

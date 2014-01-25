@@ -11,7 +11,10 @@
 # with multiple style by reusing Database, DataSource and GraphData.
 #
 # Global FIXMEs:
-# 1. Keep the eg. DEF class to be constructed with plain arguments
+# 1. Get rid of the complicated __init__ signatures and use a {dict}
+#    for rrd options set, for all classes.
+#    This will ease a lot the factory implementation
+# 2. Keep the eg. DEF class to be constructed with plain arguments
 #    and create a, say, fDEF class (a facade) that handles a Variable and
 #    creates a DEF object, able to output the cli args.
 #    This will be better for clarity, understanding, testing and debugging.
@@ -23,6 +26,11 @@
 # - Turn the test.py into a UnitTest
 #
 # Global TODOs:
+# - Separate lib into pyrrdtool.data and . graph ?
+#   for better readability ?
+# - OK Every class must have its .create(config),
+#   so that everybody know how to parse its related config object.
+#   just like databse.
 # - Create the concept of GraphTemplate():
 #   takes a DataSource as argument and applies a predefined template
 #   to this datasource. Returning a set of graph data and style
@@ -34,6 +42,44 @@
 class Component():
     "Base class for all pyrrdtool classes"
     pass
+
+#NOTE: Variable class meant to abstract the DataSource and RRA concepts,
+#       and the reuse of Datasources within update, fetch and graph commands
+#       by linking the datasource dans databases together, and making a
+#       reusable datasources directory.
+#       Moreover, il will 
+#       is it a good idea?
+class Variable(Component): #or Indicator ?
+    "Links a DataSource and a Database, and abstracts rrdtool internals"
+    #FIXME: weakref module could be used to keep refs
+    #       noooo, no need, simply say s.datasource = ds
+    vname = None
+    "Virtual name of the datasouce, used by graph components"
+    "(defaults to ds.name)"
+    ds = None
+    rrd = None
+    rra = []
+    def __init__(s, rrd, ds_name, vname=None):
+        "Creates a Variable from a Database and a datasource name"
+        "The Variable class is meta to rrdtool; it allows to reuse"
+        "datasources definitions within the graphs objects,"
+        "thus saving your typing of rrd, CF and other names"
+        for ds in rrd.datasources:
+            #uglycode, shall we use a dict for Database.datasources ?
+            if ds.name == ds_name: break
+        s.ds = ds
+        s.rrd = rrd
+        s.rra = rrd.rrarchives
+        s.vname = vname if vname else ds.name
+        
+
+#FIXME: Keep this for the pyrrd super-module, that provides more complex features.
+#class StyleTemplate(Component):
+#    "Base class for defining arbitrary style templates to be applied to the given datasource"
+#    style = []
+#    def __init__(s, ds):
+#        pass
+
 
 class Database(Component):
     "Represents a rrd database file with its DSes and RRAs"
@@ -59,84 +105,39 @@ class Database(Component):
     "Archive step interval"
     noOverwrite = None
     "Overwrite any existing database file. Values: True or False"
-    def __init__(s, name, ds, rra, step=None, start=None, overwrite=True):
+    def __init__(s, name, ds, rra, step=None, start=None):
         #FIXME: would be good to set overwrite to False by default,
         #       unlike the default of rrdtool create (which is to overwrite),
         #       this forces to delete de db explicitely to avoid loosing data
         s.name = name
-        s.datasources = ds or []
-        s.rrarchives = rra or []
+        s.datasources = ds
+        s.rrarchives = rra
         s.step = step
         s.start = start
-        s.overwrite = overwrite
-    def filename(s):
-        "Returns the database filename"
-        return s.name + '.rrd' #FIXME: use os.path
-    def apply(s, config):
-        "Applies the given config dictionary (as returned by info())"
-        #print config
-        if (config.get('start')): s.start = config.get('start')
-        s.step = config.get('step')
-        #...
-        for name,config in config.get('ds').items():
-            #FIXME: implement DST.factory(), or/and DS.factory ?
-            pass
-            ds = DataSource(
-                name,
-                factory(config.get('type'), **config) #config.min/max:NaN becomes 'U'
-            )
-    #FIXME: remove load() ?
-    def load(s, filename):
-        "Creates a database object from the given filename (eg. test.rrd)"
-        "along with the DataSource and RoundRobinArchive objects"
-        #FIXME: should this be a module function, eg: pyrrdtool.load(filename) ?
-        #       depends whether it sets this database properties or it returns a
-        #       list of objects.
-        # TODO: use rrdtool info to extract db, ds and rra information
-        #       and create the object instances accordingly
-        return []
     def __str__(s):
         "FIXME: returns the rrdtool create command arguments"
         args = {arg:getattr(s,arg)
-                for arg in ['start', 'step', 'overwrite']
+                for arg in ['start', 'step']
                 if getattr(s, arg)}
         return "create %s %s %s %s" % (
             s.filename(),
             ' '.join(['--%s %s'%(k,v) for k,v in args.items()]),
             ' '.join([str(ds) for ds in s.datasources]),
             ' '.join([str(ds) for ds in s.rrarchives]))
-
-#FIXME: Variable class meant to abstract the DataSource and RRA concepts,
-#       and the reuse of Datasources within update, fetch and graph commands
-#       by linking the datasource dans databases together, and making a
-#       reusable datasources directory.
-#       Moreover, il will 
-#       is it a good idea?
-class Variable(Component): #or Indicator ?
-    "Links a DataSource and a Database, and abstracts rrdtool internals"
-    #FIXME: weakref module could be used to keep refs
-    #       noooo, no need, simply say s.datasource = ds
-    vname = None
-    "Virtual name of the datasouce, used by graph components"
-    "(defaults to ds.name)"
-    ds = None
-    rrd = None
-    rra = []
-    def __init__(s, rrd, ds_name, vname=None):
-        for ds in rrd.datasources:
-            #uglycode
-            if ds.name == ds_name: break
-        s.ds = ds
-        s.rrd = rrd
-        s.rra = rrd.rrarchives
-        s.vname = vname if vname else ds.name
-
-#FIXME: Keep this for the pyrrd super-module, that provides more complex features.
-#class StyleTemplate(Component):
-#    "Base class for defining arbitrary style templates to be applied to the given datasource"
-#    style = []
-#    def __init__(s, ds):
-#        pass
+    def filename(s):
+        "Returns the database filename"
+        return s.name + '.rrd' #FIXME: use os.path
+    @staticmethod
+    def create(config):
+        "Returns an instance from the given config dictionary"
+        "(as returned by info())"
+        import os
+        return Database(
+            name = os.path.splitext(os.path.basename(config.get('filename')))[0],
+            ds = [DS.create(name, c) for name,c in config.get('ds').items()],
+            rra = [RRA.create(c) for c in config.get('rra')],
+            start = config.get('start'),
+            step = config.get('step'))
 
 # Below are classes for create(), that I will probably use to compose these
 # complex DS:speed:COUNTER:600:U:U and RRA:AVERAGE:0.5:1:24 patterns
@@ -147,10 +148,10 @@ class DataSource(Component):
     "Represents a DataSource definition"
     name = None
     "Name of the datasource (for referencing)"
-    # FIXME: Implement constraint:
+    # FIXME: Implement constraint ?
     # must be 1 to 19 characters long in the characters [a-zA-Z0-9_]
     # http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html
-    type = None #FIXME: object instance or object.name ?
+    type = None
     "DataType to use for this source"
     database = None #FIXME: database object reference should be set by constructor
     "Database name"
@@ -159,16 +160,24 @@ class DataSource(Component):
         s.type = type
     def __str__(s):
         return "DS:%s:%s" % (s.name, s.type)
+    @staticmethod
+    def create(name, config):
+        #NOTE: there is an inconsistency in create() signature here.
+        #       for the sake of using rrdtool info dict pristinely
+        return DataSource(
+            name = name,
+            type = DataSourceType.create(config))
 
 class DataSourceType(Component):
-    #FIXME: we could make a factory with it ?
-    #       DST.factory('AVERAGE', **kwargs) ?
     "Represents a datasource type and options used by DataSource"
     "Command line equivalent is DST:arg1:arg2:..."
+    #FIXME: Unncesseary, remove TYPES
     TYPES = ['GAUGE', 'COUNTER', 'DERIVE', 'ABSOLUTE', 'COMPUTE']
     "Available types"
-
-class DataSourceTypeCommon(DataSourceType):
+    @staticmethod
+    def create(config):
+        return globals()[config.get('type')].create(config)
+class DataSourceType_Common(DataSourceType):
     heartbeat = None
     "the maximum number of seconds that may pass between two updates of this"
     "data source before the value of the data source is assumed to be *UNKNOWN*"
@@ -188,10 +197,17 @@ class DataSourceTypeCommon(DataSourceType):
         return '%s:%s' % (
             s.__class__.__name__,
             ':'.join([str(getattr(s,arg)) for arg in ['heartbeat','min','max']]))
-class GAUGE(DataSourceTypeCommon): pass
-class COUNTER(DataSourceTypeCommon): pass
-class DERIVE(DataSourceTypeCommon): pass
-class ABSOLUTE(DataSourceTypeCommon): pass
+    @staticmethod
+    def create(config):
+        return globals()[config.get('type')](
+            heartbeat = config.get('minimal_heartbeat'),
+            #FIXME: a parser function should take care of value format conversion
+            min = config.get('min').replace('NaN','U'),
+            max = config.get('max').replace('NaN','U'))
+class GAUGE(DataSourceType_Common): pass
+class COUNTER(DataSourceType_Common): pass
+class DERIVE(DataSourceType_Common): pass
+class ABSOLUTE(DataSourceType_Common): pass
 class COMPUTE(DataSourceType):
 #FIXME: RPN is used by the COMPUTE DataType and the CDEF and VDEF graph variables type.
 #        Shall we make an RPN class whose purpose is to
@@ -200,8 +216,16 @@ class COMPUTE(DataSourceType):
 #        http://oss.oetiker.ch/rrdtool/doc/rrdgraph_rpn.en.html
 #        RPN reuse is not todays topic so let's keep it simple
 #        for now and refactor if needed in the future
-    rpn = []
+    rpn = ''
     "Reverse polish notation arguments"
+    def __init__(s, rpn):
+        s.rpn = rpn
+    def __str__(s):
+        return 'COMPUTE:%s' % s.rpn
+    @staticmethod
+    def create(config):
+        return COMPUTE(
+            rpn = config.get('cdef'))
 
 class RoundRobinArchive(Component):
     "Represents a RoundRobinArchive (RRA)  used by create()"
@@ -212,7 +236,7 @@ class RoundRobinArchive(Component):
     #       in order to have named arguments as class properties ?
     #       as well as HWPREDICT|MHWPREDICT|... classes ? 
     consolidation = None
-    "Consolidation function. Values: AVERAGE|MIN|MAX|LAST"
+    "Consolidation function (cf). Values: AVERAGE|MIN|MAX|LAST"
     "The consolidation function to use with the archive"
     "This affects how data is resampled to lower resolutions"
     "and should be chosen according to what you want to track"
@@ -233,6 +257,15 @@ class RoundRobinArchive(Component):
         return 'RRA:%s:%s' % (
             s.consolidation,
             ':'.join([str(getattr(s, arg)) for arg in ['xff','steps','rows']]))
+    @staticmethod
+    def create(config):
+        return RoundRobinArchive(
+            consolidation = config.get('cf'),
+            #FIXME: a parser function should take care of value format conversion
+            #       eg. format(value) - note that it formatting has two directions
+            xff = float(config.get('xff').replace(',','.')),
+            steps = int(config.get('pdp_per_row')),
+            rows = int(config.get('rows')))
 
 
 # Below are classes for graph()
@@ -324,6 +357,7 @@ class DEF(GraphElement):
             'DEF', #s.__class__.__name__,
             s.vname, s.rrdfile, s.ds_name, s.cf)
 class eDEF(GraphElement):
+    #FIXME: DEF is DEF_Base, eDEF is DEF and contains an instance of DEF_Base
     #FIXME: there is something to do with /reuse/ of DataSources config here
     #       -> yes, the concept of Variable (or Indicator?)
     variable = None
@@ -340,12 +374,23 @@ class eDEF(GraphElement):
         return str(DEF(s.variable.vname, s.variable.rrd.filename(), s.variable.ds.name,
             #FIXME: arbitratily uses the first available RRA
             s.variable.rra[0].consolidation))
-#class CDEF(GraphElement):
-#    vname = None
-#    rpn = []
-#class VDEF(GraphElement):
-#    vname = None
-#    rpn = []
+class GraphElement_Common():
+    vname = None
+    rpn = None
+    def __init__(s, vname, rpn):
+        s.vname = vname
+        "Variable name to use for calculated value (virtual name)"
+        s.rpn = rpn
+        "Operation in RPN format (reverse polish notation)"
+        "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_rpn.en.html"
+    def __str__(s):
+        return '%s=%s,%s,' % (
+            s.__class__.__name__,
+            s.vname, rpn)
+class CDEF(GraphElement_Common):
+    pass
+class VDEF(GraphElement_Common):
+    pass
 
 class GraphStyle(GraphElement):
     "Base class for graph print elements classes"
@@ -423,6 +468,64 @@ DST = DataSourceType
 RRA = RoundRobinArchive
 
 
+# Module-level functions
+def info_raw(filename):
+    "Returns a dict from the rrd file raw meta-information"
+    import re
+    from collections import defaultdict
+    rawdata = _call('info %s' % filename)
+    # Creates dict from 'rrd' data
+    m = re.findall(r'^(\w*?) = (.*)$', rawdata, re.MULTILINE)
+    data = dict(m)
+    # Creates a structured dict out of 'ds' data
+    m = re.findall(r'^ds\[(.*?)\]\.(.*?) = (.*)$', rawdata, re.MULTILINE)
+    ds = data['ds'] = defaultdict(dict)
+    for name, key, value in m:
+        ds[name][key] = value
+    # Creates a structured dict out of 'rra' data
+    m = re.findall(r'^rra\[(.*?)\]\.(.*?) = (.*)$', rawdata, re.MULTILINE)
+    rra = data['rra'] = defaultdict(dict)
+    for name, key, value in m:
+        rra[name][key] = value
+    # Typecast: ds: defaultdict -> dict, rra: defaultdict -> list
+    data['ds'] = dict(ds)
+    data['rra'] = [rra[str(i)] for i in range(len(rra))] # assumes rra key
+                     # are contiguous, will raise an error if not the case
+    return data
+
+def info(filename):
+    "Returns a dict from the rrd file meta-information"
+    "containing a subset of content that is useful to pyrrdtool"
+    #FIXME: in fact, the info dict should be returned as is:
+    #       toby thought about its info spec, reuse it: simpler, thiner,  better
+    def clean(info):
+        "Recursively strips quotes (\") from values"
+        # Strips quotes (") from values
+        for k in info:
+            if type(info[k]) == list:
+                info[k] = [clean(i) for i in info[k]]
+            elif type(info[k]) == dict:
+                clean(info[k])
+            else:
+                info[k] = info[k].strip('"')
+                #FIXME: Clean 'cdp_prep[0]' keys in rra list items
+                #FIXME: Convert 0,0000000000e+00 values to float ?
+                #FIXME: Convert NaN values to float('nan') ? or 'U' ? which is most meaningful
+        return info
+    return clean(info_raw(filename))
+
+def _call(argline):
+    "Helper for rrdtool command calls"
+    import subprocess
+    cmd = ['rrdtool'] + argline.split()
+    return subprocess.check_output(cmd, shell=False)
+    # !! don't use graphing from cli without pipe mode (rrdtool -) !
+    #    It will reload fonts cache every time !
+    #    Tobi says the way out is to run 'rrdtool -' (pipe mode)
+    # Use it from a shared library to avoid reloading fonts cache
+    # on every call (does pythonrrd lib do that, is it a shared lib ??)
+
+
 # Below are low level helper function for calling rrdtool cli with arguments
 
 # http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html
@@ -470,62 +573,18 @@ def graph(indicators=[], outfile='-', options=[], data=[]):
     #       or use a options list ? (with default best options)
     pass
 
-def info_raw(filename):
-    "Returns a dict from the rrd file raw meta-information"
-    import re
-    from collections import defaultdict
-    rawdata = _call('info %s' % filename)
-    # Creates dict from 'rrd' data
-    m = re.findall(r'^(\w*?) = (.*)$', rawdata, re.MULTILINE)
-    data = dict(m)
-    # Creates a structured dict out of 'ds' data
-    m = re.findall(r'^ds\[(.*?)\]\.(.*?) = (.*)$', rawdata, re.MULTILINE)
-    ds = data['ds'] = defaultdict(dict)
-    for name, key, value in m:
-        ds[name][key] = value
-    # Creates a structured dict out of 'rra' data
-    m = re.findall(r'^rra\[(.*?)\]\.(.*?) = (.*)$', rawdata, re.MULTILINE)
-    rra = data['rra'] = defaultdict(dict)
-    for name, key, value in m:
-        rra[name][key] = value
-    # Typecast: ds: defaultdict -> dict, rra: defaultdict -> list
-    data['ds'] = dict(ds)
-    data['rra'] = [rra[str(i)] for i in range(len(rra))] # assumes rra key
-                     # are contiguous, will raise an error if not the case
-    return data
-
-def info(filename):
-    "Returns a dict from the rrd file meta-information"
-    "containing a subset of meaningful content and values"
-    def clean(info):
-        # Strips quotes (") from values
-        #FIXME: Clean 'cdp_prep[0]' keys in rra list items
-        #FIXME: Convert 0,0000000000e+00 values to float ?
-        #FIXME: Convert NaN values to float('nan') ? or 'U' ? which is most meaningful
-        for k in info:
-            if type(info[k]) == list: info[k] = [clean(i) for i in info[k]]
-            elif type(info[k]) == dict: clean(info[k])
-            else: info[k] = info[k].strip('"')
-        return info
-    # Translates values
-    return clean(info_raw(filename))
-
-def _call(argline):
-    "Helper for rrdtool command calls"
-    import subprocess
-    cmd = ['rrdtool'] + argline.split()
-    return subprocess.check_output(cmd, shell=False)
-    # !! don't use graphing from cli without pipe mode (rrdtool -) !
-    #    It will reload fonts cache every time !
-    #    Tobi says the way out is to run 'rrdtool -' (pipe mode)
-    # Use it from a shared library to avoid reloading fonts cache
-    # on every call (does pythonrrd lib do that, is it a shared lib ??)
 
 def factory(classname, *args, **kwargs):
     "Static factory method"
+    #FIXME: superseded by Component.create
     #FIXME: get the classname.__init__() arguments using
     #       import inspect; print(inspect.getargspec(the_function)), and remove
     #       kwargs keys that are not expected by classname.__init__()
+    cls = globals()[classname]
+    import inspect
+    print inspect.getargspec(cls.__init__)
+    print 
+    print args, kwargs
     return globals()[classname](*args, **kwargs)
 
 

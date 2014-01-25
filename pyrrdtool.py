@@ -11,14 +11,19 @@
 # with multiple style by reusing Database, DataSource and GraphData.
 #
 # Global FIXMEs:
-# 1. Get rid of the complicated __init__ signatures and use a {dict}
+# 1. Get rid of the complicated __init__ signatures and use a {dict} ?
 #    for rrd options set, for all classes.
+#    but this make __doc__ the options impossible :(
 #    This will ease a lot the factory implementation
+#    -> so it is not an argument anymore :)
 # 2. Keep the eg. DEF class to be constructed with plain arguments
 #    and create a, say, fDEF class (a facade) that handles a Variable and
 #    creates a DEF object, able to output the cli args.
 #    This will be better for clarity, understanding, testing and debugging.
 #    (done for DEF, ongoing for all others)
+#    -> make it neat between DEF and eDEF:
+#    remove the eDEF class, and create a DEF.from(variable, config)
+#    as well as LINE.from(variable, config), etc.
 # - Reuse the cli doc option definitions in classes variables doc
 #   (with useful links to rrdtool apidoc?)
 # - Check definition classes variables default values,
@@ -144,11 +149,6 @@ class Database(Component):
             start = config.get('start'),
             step = config.get('step'))
 
-# Below are classes for create(), that I will probably use to compose these
-# complex DS:speed:COUNTER:600:U:U and RRA:AVERAGE:0.5:1:24 patterns
-# FIXME: It would be great to be able to use DataSources seamlessly,
-#        for graphing without thinking of their database.
-#        For that, the datasource needs to know to which Database(s) it belongs to.
 class DataSource(Component):
     "Represents a DataSource definition"
     name = None
@@ -176,8 +176,6 @@ class DataSource(Component):
 class DataSourceType(Component):
     "Represents a datasource type and options used by DataSource"
     "Command line equivalent is DST:arg1:arg2:..."
-    #FIXME: Unncesseary, remove TYPES
-    TYPES = ['GAUGE', 'COUNTER', 'DERIVE', 'ABSOLUTE', 'COMPUTE']
     "Available types"
     @staticmethod
     def create(config):
@@ -233,26 +231,22 @@ class COMPUTE(DataSourceType):
             rpn = config.get('cdef'))
 
 class RoundRobinArchive(Component):
-    "Represents a RoundRobinArchive (RRA)  used by create()"
+    "Represents a RoundRobinArchive (RRA)"
     #FIXME: Necessary? Are the cli/lib error messages good enough ?
-    CONSOLIDATION_FUNCTIONS = ['AVERAGE', 'MIN', 'MAX', 'LAST']
-    "Available consolidation functions"
-    #FIXME: shall we create class AVERAGE|MIN|MAX|LAST() ?
-    #       in order to have named arguments as class properties ?
-    #       as well as HWPREDICT|MHWPREDICT|... classes ? 
+    rows = None
+    "Number of rows in the archive"
+    "(a row is a slot containing a data; data type is: double)"
+    steps = None
+    "Number of pdp represented by a row"
+    xff = None
+    "The ratio of allowed unknown pdp data per row (xfile factor)"
     consolidation = None
-    "Consolidation function (cf). Values: AVERAGE|MIN|MAX|LAST"
+    "Consolidation function (cf) name. Values: AVERAGE|MIN|MAX|LAST"
+    "Used for consolidating a set of PDPs into a rows"
     "The consolidation function to use with the archive"
     "This affects how data is resampled to lower resolutions"
     "and should be chosen according to what you want to track"
     "eg. MIN is you want to track, say, a minimal service level"
-    xff = None
-    steps = None
-    rows = None
-    #FIXME: Update doc: "A list of consolidation function options"
-    "These options configure the behaviour of the consolidation function"
-    "The options structure and contents depends on the function used"
-    "http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html"
     def __init__(s, consolidation, xff, steps, rows):
         s.consolidation = consolidation
         s.xff = xff
@@ -273,8 +267,6 @@ class RoundRobinArchive(Component):
             rows = int(config.get('rows')))
 
 
-# Below are classes for graph()
-# There are many more to implement (thus understand): LINE, AREA, PRINT, ...
 # http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html
 # Remember: the goal is to reuse DataSource and RRD configs
 #           try to create a ~ORM for rrd? :)
@@ -285,13 +277,43 @@ class Graph(Component):
     name = '-'
     #FIXME: Reuse cli options names and doc (--* options)
     #       Implement as 1 attribute per option, or options = [] ?
+    # All cli options:
+    # https://github.com/oetiker/rrdtool-1.x/blob/master/src/rrd_graph.c#L4409
+    #FIXME: most of these are style, a Graph
     args = {
         'imgformat': None,
         #Values: PNG|SVG|EPS|PDF
-        'disable-rrdtool-tag': True,
-        "Hides Tobis credits"
+        'border': None,
+        #Border width (in pixels)
         'color': {},
-        "Graph elements colors (eg. {'CANVAS':'ffaa00', 'GRID':'cc00cc'}" 
+        #Graph elements colors, eg. {'CANVAS':'ffaa00', 'GRID':'cc00cc'}
+        #BACK background
+        #CANVAS:background of the actual graph,
+        #FRAME: line around the color spots
+        #FONT: font color
+        #GRID, MGRID: the (major) grid
+        #AXIS graph axish
+        #ARROW: xy arrow heads
+        #SHADEA: top border
+        #SHADEB: right and bottom border
+        'slope-mode': None,
+        #Enable curving the staircase data, although it is not all true
+        'grid-dash': None,
+        #Values: on, off
+        'watermark': '',
+        #String to use for watermark drawing
+        'disable-rrdtool-tag': True, #FIXME: set to none by default
+        #Hides Tobis credits
+        'graph-render-mode': None,
+        #Graph antialias ('normal': enabled (default), 'mono': disabled)
+        'font-render-mode': None,
+        #Font antialias (normal (default), light, mono)
+        'zoom': None,
+        #Zooms the graph by the given factor (>0)
+        'base': None,
+        #If you are graphing memory (and NOT network traffic) this switch
+        #should be set to 1024 so that one Kb is 1024 byte. For traffic
+        #measurement, 1 kb/s is 1000 b/s
         'option2': None,
         'option3': None,
     }
@@ -312,6 +334,7 @@ class Graph(Component):
     def __str__(s):
         def f(arg, value):
             return '--%s'%arg if type(value)==bool else '--%s %s'%(arg, value)
+        #FIXME: mind the falsy values (eg 0)
         args = [f(arg, s.args.get(arg)) for arg in s.args if s.args.get(arg)]
         return 'graph %s %s %s %s' % (
             s.name,
@@ -337,17 +360,17 @@ class GraphData(GraphElement):
     "Base class for graph data definition classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_data.en.html"
     INSTRUCTIONS_TYPES = ['DEF', 'VDEF', 'CDEF']
-#FIXME: this is not used anymore, remove it
-    instruction = None
-    args = []
-    def __init__(s, instruction, args):
-        s.instruction = instruction
-        s.args = args
-    def __str__(s):
-        return '%s:%s' % (
-            s.instruction,
-            ':'.join([str(arg) for arg in s.args]))
-class DEF(GraphElement):
+    #FIXME: this is not used anymore, remove it
+    #instruction = None
+    #args = []
+    #def __init__(s, instruction, args):
+    #    s.instruction = instruction
+    #    s.args = args
+    #def __str__(s):
+    #    return '%s:%s' % (
+    #        s.instruction,
+    #        ':'.join([str(arg) for arg in s.args]))
+class DEF(GraphData):
     vname = None
     rrdfile = None
     ds_name = None
@@ -386,10 +409,10 @@ class eDEF(GraphElement):
                        s.variable.ds.name,
                        #FIXME: arbitratily uses the first available RRA
                        s.variable.rra[0].consolidation)
-       #FIXME: add remaining constructor args (as in DEF)
+    #FIXME: add remaining constructor args (as in DEF)
     def __str__(s):
         return str(s.element)
-class GraphElement_Common():
+class GraphData_Common():
     vname = None
     rpn = None
     def __init__(s, vname, rpn):
@@ -402,16 +425,22 @@ class GraphElement_Common():
         return '%s=%s,%s,' % (
             s.__class__.__name__,
             s.vname, rpn)
-class CDEF(GraphElement_Common):
+class CDEF(GraphData_Common):
     pass
-class VDEF(GraphElement_Common):
+class VDEF(GraphData_Common):
     pass
 
 # Below are graph style classes
+# FIXME: it should be (but it is to complicated, for now Data Def&Style are merged into LINE, AREA,... classes)
+# Graph
+# +-Data
+#   +-Element (data definition)
+# +-Style
+#   +-Graph (overall style; graph command options)
+#   +-Element (content style; graph LINE, AREA, PRINT, etc, but without the data-definition.
 class GraphStyle(GraphElement):
     "Base class for graph print elements classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
-    INSTRUCTIONS_TYPES = ['PRINT','GPRINT','COMMENT','VRULE','HRULE','LINE','AREA','TICK','SHIFT','TEXTALIGN']
     def __init__(s, args):
         s.args = dict(s.args.items() + args.items())
     #FIXME: this will be unused when all graph style instructions are implemented
@@ -428,6 +457,8 @@ class GraphStyle(GraphElement):
 #NOTE: some common factors:
 # a. legend, color
 # b. dashes, dashes-offset
+class DataStyle(GraphElement):
+    pass
 class LINE(GraphStyle):
     args = {
         'width': None,
@@ -612,22 +643,22 @@ def _call(argline):
 #FIXME: for now str(Database) outputs the create command args
 #       it is better to use this create() function below to do that job
 #       but shall we use that long func signature, or just create(Database) ?
-def create(filename, start=None, step=None, overwrite=True, ds=[], rra=[]):
-    pass
+#def create(filename, start=None, step=None, overwrite=True, ds=[], rra=[]):
+#    pass
 
 # http://oss.oetiker.ch/rrdtool/doc/rrdupdate.en.html
 # rrdtool {update | updatev} filename [--template|-t ds-name[:ds-name]...] [--daemon address] [--] N|timestamp:value[:value...] at-timestamp@value[:value...] [timestamp:value[:value...] ...]
 # rrdtool update test.rrd 920804700:12345 920805000:12357 920805300:12363
-def update(filename, value, time='N', verbose=False):
-    # rrdtool update filename time:value
-    # use updatev if verbose=True
-    pass
+#def update(filename, value, time='N', verbose=False):
+#    # rrdtool update filename time:value
+#    # use updatev if verbose=True
+#    pass
 
 # http://oss.oetiker.ch/rrdtool/doc/rrdfetch.en.html
 # rrdtool fetch filename CF [--resolution|-r resolution] [--start|-s start] [--end|-e end] [--daemon address]
 # rrdtool fetch test.rrd AVERAGE --start 920804400 --end 920809200
-def fetch(filename, consolidation='AVERAGE', start=None, end=None, resolution=None, daemon=None):
-    pass
+#def fetch(filename, consolidation='AVERAGE', start=None, end=None, resolution=None, daemon=None):
+##    pass
 
 # http://oss.oetiker.ch/rrdtool/doc/rrdgraph.en.html
 # rdtool graph|graphv filename [option ...] [data definition ...] [data calculation ...] [variable definition ...] [graph element ...] [print element ...]
@@ -641,42 +672,42 @@ def fetch(filename, consolidation='AVERAGE', start=None, end=None, resolution=No
 #    HRULE:100#0000FF:"Maximum allowed"              \
 #    AREA:good#00FF00:"Good speed"                   \
 #    AREA:fast#FF0000:"Too fast"
-def graph(indicators=[], outfile='-', options=[], data=[]):
-    #FIXME: Shall we enumerate all (20+) cli options in the fn signature
-    #       or use a options list ? (with default best options)
-    pass
+#def graph(indicators=[], outfile='-', options=[], data=[]):
+#    #FIXME: Shall we enumerate all (20+) cli options in the fn signature
+#    #       or use a options list ? (with default best options)
+#    pass
 
-
-def factory(classname, *args, **kwargs):
-    "Static factory method"
-    #FIXME: superseded by Component.create
-    #FIXME: get the classname.__init__() arguments using
-    #       import inspect; print(inspect.getargspec(the_function)), and remove
-    #       kwargs keys that are not expected by classname.__init__()
-    cls = globals()[classname]
-    import inspect
-    print inspect.getargspec(cls.__init__)
-    print 
-    print args, kwargs
-    return globals()[classname](*args, **kwargs)
+#FIXME: superseded by .create() static functions
+#def factory(classname, *args, **kwargs):
+#    "Static factory method"
+#    #FIXME: superseded by Component.create
+#    #FIXME: get the classname.__init__() arguments using
+#    #       import inspect; print(inspect.getargspec(the_function)), and remove
+#    #       kwargs keys that are not expected by classname.__init__()
+#    cls = globals()[classname]
+#    import inspect
+#    print inspect.getargspec(cls.__init__)
+#    print 
+#    print args, kwargs
+#    return globals()[classname](*args, **kwargs)
 
 
 #FIXME: superseded by class Variable, remove this
-def datasources():
-    "Test implementation to collect existing Datasources objects"
-    #FIXME: return a list of Variable objects ?
-    #FIXME: the DataSource should really be added its rrd & rra references list
-    #       it would make it so easy to use (eg. add a whole RRD.datasources to a graph!)
-    #       but it is a short round towards that goal
-    import gc
-    datasources = {}
-    for rrd in gc.get_objects():
-        if isinstance(rrd, Database):
-            for ds in rrd.datasources:
-                ds._rrd = rrd
-                ds._rra = rrd.rrarchives
-                datasources[ds.name] = ds
-    return datasources
+#def datasources():
+#    "Test implementation to collect existing Datasources objects"
+#    #FIXME: return a list of Variable objects ?
+#    #FIXME: the DataSource should really be added its rrd & rra references list
+#    #       it would make it so easy to use (eg. add a whole RRD.datasources to a graph!)
+#    #       but it is a short round towards that goal
+#    import gc
+#    datasources = {}
+#    for rrd in gc.get_objects():
+#        if isinstance(rrd, Database):
+#            for ds in rrd.datasources:
+#                ds._rrd = rrd
+#                ds._rra = rrd.rrarchives
+#                datasources[ds.name] = ds
+#    return datasources
 
 # Below are definition import/export functions
 # This might be another piece of software (standalone or with webview)

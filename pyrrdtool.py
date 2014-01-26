@@ -178,7 +178,7 @@ class Database(Component):
         #       iterate kwargs ?
         cf = cf or s.rrarchives[0].cf
         cmd = 'fetch %s %s' % (s.filename(), cf)
-        print cmd
+        #FIXME: return an array of better data (eg with readable time)
         return _call(cmd)
 
 class DataSource(Component):

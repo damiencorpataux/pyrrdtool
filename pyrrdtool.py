@@ -163,6 +163,7 @@ class Database(Component):
     def create(config):
         "Returns an instance from the given config dictionary"
         "(as returned by info())"
+        #FIXME: create is a bad name, it can be confused with update/fetch
         import os
         return Database(
             #name = os.path.splitext(os.path.basename(config.get('filename')))[0],

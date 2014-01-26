@@ -137,11 +137,14 @@ print 'Data end:', time.ctime(timestamp)
 # Creates graph
 speed = rrd.Variable(d, 'speed')
 g = rrd.Graph([rrd.DEF.from_variable(speed)],
-              [rrd.LINE.from_variable(speed, {'width':1, 'color': 'aacc00'})],
+              [
+               rrd.AREA.from_variable(speed, {'color': 'ffffcc'}),
+               rrd.LINE.from_variable(speed, {'width': 2, 'color': 'ccff33'}),
+              ],
               'g.png', {
                   #FIXME: should rrdtool graph adapt to rrd data timespan ?
-                  #'start': start_ts,
-                  'start': timestamp - 20000,
+                  'start': start_ts,
+                  #'start': timestamp - 20000,
                   'end': timestamp
               })
 print g

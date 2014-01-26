@@ -29,6 +29,7 @@
 #      and there's a get_args() function that returns args dict from class vars
 #      this way we can still documents args using class vars __doc__
 #      -> but can we merge easily the given args (as easy as dict) ?
+#    Anyway it is: either all-kwargs, either options dict
 # 2. DEF- & LINE.from_template show that the __init__ signature of their
 #    respective class differs: the 1st is kwargs, the 2nd is {options_dict}
 #    This is linked to 1. - so decide.
@@ -48,6 +49,8 @@
 #   flamestyle http://old.ed.zehome.com/?page=rrdtool2
 # - Separate lib into pyrrdtool.data and . graph ?
 #   for better readability ?
+# - See if __repr__ should be used over __str__
+#   http://stackoverflow.com/questions/1436703/difference-between-str-and-repr-in-python
 # - Manage the rrdcached daemon parameter
 
 
@@ -164,6 +167,8 @@ class Database(Component):
         return s.name + '.rrd' #FIXME: use os.path
     def update(s, data, timestamp='N'):
         "Updates database using the given dict (use 'U' for unknown values)"
+        #FIXME: allow to pass an list of [{timestamp:'N',data:{}}]
+        #       so that rrdtool update can be called once
         import collections
         data = collections.OrderedDict(data)
         cmd = 'updatev %s --template %s -- %s:%s' % (
@@ -311,7 +316,8 @@ class Graph(Component):
     #       Implement as 1 attribute per option, or options = [] ?
     # All cli options:
     # https://github.com/oetiker/rrdtool-1.x/blob/master/src/rrd_graph.c#L4409
-    #FIXME: most of these are style, a Graph
+    #FIXME: most of these are style, move them into class GraphStyle
+    #       and reference GraphStyle from Graph.style
     args = {
         #'name': here or as class variable ?
         'start': None,
@@ -453,23 +459,38 @@ class VDEF(GraphData_Common):
 
 # Below are graph style classes
 # FIXME: it should be (but it is to complicated, for now Data Def&Style are merged into LINE, AREA,... classes)
-# Graph
-# +-Data
-#   +-Element (data definition)
-# +-Style
-#   +-Graph (overall style; graph command options)
-#   +-Element (content style; graph LINE, AREA, PRINT, etc, but without the data-definition.
+# GraphElement
+# +-Graph (contains a graph style)
+# +-GraphStyle (overall style; graph cmd options: --border, --color, --...)
+# +-GraphData
+# | +-DEF, CDEF, VDEF
+# +-GraphDataStyle
+#   +-LINE, AREA, PRINT, etc,
+#     #FIXME: me wight separate style and ds-definition, but that's more complexity than benefit.
 class GraphStyle(GraphElement):
     "Base class for graph print elements classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
+    args = {}
+    order = []
     def __init__(s, args):
         s.args = dict(s.args.items() + args.items())
+    def __str__(s):
+        "Returns a rrdtool-formatted arguments line"
+        "Note: if value is falsy, the function returns an empty string"
+        "therefore, in order to create arguments with falsy values,"
+        "the value must be initialized as a string, eg '0' instead of 0"
+        #return reduce(lambda string, arg: string + f(arg, s.args.get(arg)), order, '')
+        return s.__class__.__name__+reduce(
+            lambda x, y: x + y,
+            [s.format(arg) for arg in s.order if s.args.get(arg)])
+    def format(s, argument_key):
+        "Returns a rrdtool-formatted argument and value"
+        "from the given argument_key"
+        raise NotImplementedError('This method must be implemented by subclasses')
 #FIXME: shall we create 1 class per GraphStyle element ?
 #NOTE: some common factors:
 # a. legend, color
 # b. dashes, dashes-offset
-class DataStyle(GraphElement):
-    pass
 class LINE(GraphStyle):
     args = {
         'width': None,
@@ -481,28 +502,26 @@ class LINE(GraphStyle):
         'dashes': None,
         'dashOffset': None
     }
-    def __str__(s):
-        # LINE[width]:value[#color][:[legend][:STACK][:skipscale][:dashes[=on_s[,off_s[,on_s,off_s]...]][:dash-offset=offset]]
-        f = lambda arg, value: {
-                'width': '%s' % value,
-                'value': ':%s' % value, # mandatory
-                'color': '#%s' % value,
-                'legend': ':%s' % value,
-                'STACK': 'STACK', #FIXME: use lowercase for key ?
-                'skipscale': 'skipscale',
-                'dashes': ':dashes=%s' % value,
-                'dashOffset': ':dashes-offset=%s' % value,
-            }[arg]# if value else '' #FIXME: attention, falsy values
-        order = ['width', 'value', 'color', 'legend', 'STACK', 'skipscale', 'dashes', 'dashOffset']
-        #return reduce(lambda string, arg: string + f(arg, s.args.get(arg)), order, '')
-        return s.__class__.__name__+reduce(
-            lambda x, y: x + y,
-            [f(arg, s.args.get(arg)) for arg in order if s.args.get(arg)])
+    order = ['width', 'value', 'color', 'legend', 'STACK', 'skipscale', 'dashes', 'dashOffset']
+    def format(s, argument_key):
+        #LINE[width]:value[#color][:[legend][:STACK][:skipscale]\
+        #[:dashes[=on_s[,off_s[,on_s,off_s]...]][:dash-offset=offset]]
+        value = s.args.get(argument_key)
+        return {
+            'width': '%s' % value,
+            'value': ':%s' % value, # mandatory
+            'color': '#%s' % value,
+            'legend': ':%s' % value,
+            'STACK': 'STACK', #FIXME: use lowercase for key ?
+            'skipscale': 'skipscale',
+            'dashes': ':dashes=%s' % value,
+            'dashOffset': ':dashes-offset=%s' % value
+        }[argument_key]
     @staticmethod
     def from_variable(variable, config={}):
-        baseconfig = { 'value': variable.vname }
+        #print __class__ #should be LINE, if so, I can use this for GraphDataStyle.from_variable()
+        baseconfig = { 'value': variable.vname } if 'value' in LINE.args else {}
         return LINE(dict(baseconfig.items() + config.items()))
-    
 class AREA(GraphStyle):
     args = {
         'value':  None,
@@ -511,19 +530,21 @@ class AREA(GraphStyle):
         'STACK': None,
         'skipscale': None
     }
-    def __str__(s):
+    order = ['value', 'color', 'legend', 'STACK', 'skipscale']
+    def format(s, argument_key):
         # AREA:value[#color][:[legend][:STACK][:skipscale]]
-        f = lambda arg, value: {
+        value = s.args.get(argument_key)
+        return {
             'value': ':%s' % value,
             'color': '#%s' % value,
             'legend': ':%s' % value,
             'STACK' : 'STACK',
             'skipscale': 'skipscale'
-        }[arg]
-        order = ['value', 'color', 'legend', 'STACK', 'skipscale']
-        return s.__class__.__name__+reduce(
-            lambda x, y: x + y,
-            [f(arg, s.args.get(arg)) for arg in order if s.args.get(arg)])
+        }[argument_key]
+    @staticmethod
+    def from_variable(variable, config={}):
+        baseconfig = { 'value': variable.vname }
+        return AREA(dict(baseconfig.items() + config.items()))
 #class PRINT(GraphStyle):
 #    vname = None
 #    format = None

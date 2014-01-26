@@ -172,6 +172,14 @@ class Database(Component):
             timestamp,
             ':'.join([str(v) for k,v in data.items()]))
         return _call(cmd)
+    def fetch(s, cf=None, start=None, end=None, resolution=None):
+        "Fetches and returns data from rrd"
+        #FIXME: implement remaining command options
+        #       iterate kwargs ?
+        cf = cf or s.rrarchives[0].cf
+        cmd = 'fetch %s %s' % (s.filename(), cf)
+        print cmd
+        return _call(cmd)
 
 class DataSource(Component):
     "Represents a DataSource definition"

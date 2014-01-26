@@ -125,7 +125,7 @@ for cycle in range(1):
         sin = int(amp + (amp * m.sin(m.radians(degree))))
         # Update
         print "Update:", timestamp, time.ctime(timestamp), sin
-        d.update({'speed': sin}, timestamp=timestamp)
+        print d.update({'speed': sin}, timestamp=timestamp)
 
 # Creates graph
 speed = rrd.Variable(d, 'speed')
@@ -138,3 +138,7 @@ g = rrd.Graph([rrd.DEF.from_variable(speed)],
               })
 print g
 g.draw()
+
+
+print "# Database fetch"
+print d.fetch()

@@ -22,6 +22,7 @@
 #    Alternatives:
 #    - options dict: there's a args dict the defines args names and default values,
 #      it makes easy to iterate the dict to generate args
+#      it makes easy to have dashes (-) in keys (eg no-overwrite, dash-offset)
 #      it makes easy to merge default options dict with given options dict
 #    - kwargs: there's a args_order list that defines
 #      (1) arguments names (for finding rddtool args amongst class vars) and default values
@@ -33,6 +34,12 @@
 # 2. DEF- & LINE.from_template show that the __init__ signature of their
 #    respective class differs: the 1st is kwargs, the 2nd is {options_dict}
 #    This is linked to 1. - so decide.
+# 3. Component.from_variable factorization fails because it is
+#    static and doesn't know __class__, therefore it is impossible
+#    to factorize it into the super-class.
+#    Why not make an .apply(s, config) method that is a @classmethod
+#    and use it so: LINE.apply(LINE(config), variable)
+#    or maybe even: Component.factory(LINE(config), variable)
 # - Reuse the cli doc option definitions in classes variables doc
 #   (with useful links to rrdtool apidoc?)
 # - Check definition classes variables default values,
@@ -51,7 +58,8 @@
 #   for better readability ?
 # - See if __repr__ should be used over __str__
 #   http://stackoverflow.com/questions/1436703/difference-between-str-and-repr-in-python
-# - Manage the rrdcached daemon parameter
+# - Add the ability to create a definition object from a given rrdtool command line
+# - Manage the rrdcached daemon parameter (in Database class)
 
 
 # Below are classes that are reused across pyrrdtool components
@@ -59,7 +67,9 @@ class Component():
     "Base class for all pyrrdtool classes"
     #FIXME: shall we implement options merging here,
     #       automatic or explicitely called by subclasses ?
-    pass
+    def sapply(s, string):
+        "Applies the given string to instance args and returns the instance"
+        raise NotImplementedError('This method must be implemented by subclasses')
 
 #NOTE: Variable class meant to abstract the DataSource and RRA concepts,
 #       and the reuse of Datasources within update, fetch and graph commands
@@ -472,17 +482,18 @@ class GraphStyle(GraphElement):
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     args = {}
     order = []
-    def __init__(s, args):
+    def __init__(s, args={}):
         s.args = dict(s.args.items() + args.items())
     def __str__(s):
         "Returns a rrdtool-formatted arguments line"
         "Note: if value is falsy, the function returns an empty string"
         "therefore, in order to create arguments with falsy values,"
         "the value must be initialized as a string, eg '0' instead of 0"
-        #return reduce(lambda string, arg: string + f(arg, s.args.get(arg)), order, '')
         return s.__class__.__name__+reduce(
             lambda x, y: x + y,
             [s.format(arg) for arg in s.order if s.args.get(arg)])
+        #return s.__class__.__name__ + ''.join([s.format(arg) for arg in s.order])
+        #return reduce(lambda string, arg: string + f(arg, s.args.get(arg)), order, '')
     def format(s, argument_key):
         "Returns a rrdtool-formatted argument and value"
         "from the given argument_key"
@@ -500,9 +511,14 @@ class LINE(GraphStyle):
         'STACK': None,
         'skipscale': None,
         'dashes': None,
-        'dashOffset': None
+        'dash-offset': None
     }
-    order = ['width', 'value', 'color', 'legend', 'STACK', 'skipscale', 'dashes', 'dashOffset']
+    order = ['width', 'value', 'color', 'legend', 'STACK', 'skipscale', 'dashes', 'dash-offset']
+    @staticmethod
+    def from_variable(variable, config={}):
+        #print __class__ #should be LINE, if so, I can use this for GraphDataStyle.from_variable()
+        baseconfig = { 'value': variable.vname } #if 'value' in LINE.args else {}
+        return LINE(dict(baseconfig.items() + config.items()))
     def format(s, argument_key):
         #LINE[width]:value[#color][:[legend][:STACK][:skipscale]\
         #[:dashes[=on_s[,off_s[,on_s,off_s]...]][:dash-offset=offset]]
@@ -515,13 +531,19 @@ class LINE(GraphStyle):
             'STACK': 'STACK', #FIXME: use lowercase for key ?
             'skipscale': 'skipscale',
             'dashes': ':dashes=%s' % value,
-            'dashOffset': ':dashes-offset=%s' % value
+            'dash-offset': ':dashes-offset=%s' % value
         }[argument_key]
-    @staticmethod
-    def from_variable(variable, config={}):
-        #print __class__ #should be LINE, if so, I can use this for GraphDataStyle.from_variable()
-        baseconfig = { 'value': variable.vname } if 'value' in LINE.args else {}
-        return LINE(dict(baseconfig.items() + config.items()))
+    def sapply(s, string):
+        import re
+        m = re.match(r'LINE(?P<width>\d+|)(:(?P<value>\w+)|)(#(?P<color>[\w\d]+)|)(:(?P<legend>[^:]+)|)(:(?P<STACK>STACK)|)(:(?P<skipscale>skipscale)|)(:dashes=(?P<dashes>\w+)|)(:dash-offset=(?P<dash_offset>\d+)|)', string)
+        #FIXME: remove optional surrounding quotes (") from values, does rrd cli allows that ?
+        #       same for every GraphStyle.sapply
+        args = m.groupdict() if m else {}
+        args['dash-offset'] = args.pop('dash_offset')
+        args = {k:v if v <> '' else None for k, v in args.items()}
+        s.args = dict(s.args.items() + args.items())
+        return s
+
 class AREA(GraphStyle):
     args = {
         'value':  None,
@@ -531,6 +553,10 @@ class AREA(GraphStyle):
         'skipscale': None
     }
     order = ['value', 'color', 'legend', 'STACK', 'skipscale']
+    @staticmethod
+    def from_variable(variable, config={}):
+        baseconfig = { 'value': variable.vname }
+        return AREA(dict(baseconfig.items() + config.items()))
     def format(s, argument_key):
         # AREA:value[#color][:[legend][:STACK][:skipscale]]
         value = s.args.get(argument_key)
@@ -541,45 +567,112 @@ class AREA(GraphStyle):
             'STACK' : 'STACK',
             'skipscale': 'skipscale'
         }[argument_key]
+    def sapply(s, string):
+        import re
+        m = re.match(r'AREA(:(?P<value>\w+)|)(#(?P<color>[\w\d]+)|)(:(?P<legend>[^:]+)|)(:(?P<STACK>STACK)|)(:(?P<skipscale>skipscale)|)', string)
+        args = m.groupdict() if m else {}
+        args = {k:v if v <> '' else None for k, v in args.items()}
+        s.args = dict(s.args.items() + args.items())
+        return s
+
+class PRINT(GraphStyle):
+    args = {
+        'vname': None,
+        'format': None,
+    }
+    order = ['vname', 'format']
     @staticmethod
     def from_variable(variable, config={}):
-        baseconfig = { 'value': variable.vname }
-        return AREA(dict(baseconfig.items() + config.items()))
-#class PRINT(GraphStyle):
-#    vname = None
-#    format = None
-#class GPRINT(PRINT): pass #or
-#class GPRINT(GraphStyle):
-#    vname = None
-#    format = None
+        baseconfig = { 'vname': variable.vname }
+        return PRINT(dict(baseconfig.items() + config.items()))
+    def format(s, argument_key):
+        # PRINT|GPRINT:vname:format
+        value = s.args.get(argument_key)
+        return {
+            'vname': ':%s' % value,
+            'format': ':%s' % value,
+        }[argument_key]
+class GPRINT(PRINT):
+    @staticmethod
+    def from_variable(variable, config={}):
+        baseconfig = { 'vname': variable.vname }
+        return GPRINT(dict(baseconfig.items() + config.items()))
+#or class GPRINT(PRINT): pass
+#or class GPRINT(GraphStyle):
+#    args = {
+#        'vname': None,
+#        'format': None,
+#    }
 #class COMMENT(GraphStyle):
-#    text = None
-#class VHRULE(GraphStyle):
-#    color = None
-#    legend = None
-#    dashes = None
-#    dashOffset = None
-#    def __init__(s, p, color):
-#        setattr(s, s.p) = val
-#        s.color = color
-#class VRULE(VHRULE):
-#    p = 'time'
-#    time = None
-#class HRULE(VHRULE):
-#    p = 'value'
-#    value = None
+#    args = {
+#        'text': None,
+#    }
+class VRULE(GraphStyle):
+    args = {
+        'time': None,
+        'color': None,
+        'legend': None,
+        'dashes': None,
+        'dash-offset': None,
+    }
+    order = ['time', 'color', 'legend', 'dashes', 'dash-offset']
+    @staticmethod
+    def from_variable(variable, config={}):
+        baseconfig = { 'vname': variable.vname }
+        return VRULE(dict(baseconfig.items() + config.items()))
+    def format(s, argument_key):
+        # VRULE:time#color[:legend][:dashes[=on_s[,off_s[,on_s,off_s]...]]\
+        # [:dash-offset=offset]]
+        value = s.args.get(argument_key)
+        return {
+            'time': ':%s' % value,
+            'color': '#%s' % value,
+            'legend': ':%s' % value,
+            'dashes': ':dashes=%s' % value,
+            'dash-offset': ':dashes-offset=%s' % value
+        }[argument_key]
+class HRULE(GraphStyle):
+    args = {
+        'value': None,
+        'color': None,
+        'legend': None,
+        'dashes': None,
+        'dashOffset': None,
+    }
+    order = ['value', 'color', 'legend', 'dashes', 'dash-offset']
+    @staticmethod
+    def from_variable(variable, config={}):
+        baseconfig = { 'vname': variable.vname }
+        return HRULE(dict(baseconfig.items() + config.items()))
+    def format(s, argument_key):
+        # HRULE:value#color[:legend][:dashes[=on_s[,off_s[,on_s,off_s]...]]\
+        # [:dash-offset=offset]]
+        value = s.args.get(argument_key)
+        return {
+            'time': ':%s' % value,
+            'color': '#%s' % value,
+            'legend': ':%s' % value,
+            'dashes': ':dashes=%s' % value,
+            'dash-offset': ':dashes-offset=%s' % value
+        }[argument_key]
 #class TICK(GraphStyle):
-#    vname = None
-#    color = None
-#    alpha = None
-#    fraction = None
-#    legend = None
+#    args = {
+#        'vname': None,
+#        'color': None,
+#        'alpha': None,
+#        'fraction': None,
+#        'legend': None,
+#    }
 #class SHIFT(GraphStyle):
-#    vname = None
-#    offset = None
+#    args = {
+#        'vname': None,
+#        'offset': None,
+#    }
 #class TEXTALIGN(GraphStyle):
-#    value = None
-#    "Values: left|right|justified|center"
+#    args = {
+#        'value': None,
+#        #"Values: left|right|justified|center"
+#    }
 
 
 # Shorthands

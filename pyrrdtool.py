@@ -60,6 +60,7 @@
 #   http://stackoverflow.com/questions/1436703/difference-between-str-and-repr-in-python
 # - Add the ability to create a definition object from a given rrdtool command line
 # - Manage the rrdcached daemon parameter (in Database class)
+# - Include Holt Winters args/types handling (eg. HWPREDICT datasrc types, ...)
 
 
 # Below are classes that are reused across pyrrdtool components
@@ -173,6 +174,10 @@ class Database(Component):
             rra = [RRA.create(c) for c in config.get('rra')],
             start = config.get('start'),
             step = config.get('step'))
+    @staticmethod
+    def load(filename):
+        "Returns an instance from que given rrd filename"
+        rrd.Database.create(rrd.info(filename))
     def filename(s):
         "Returns the database filename"
         return s.name + '.rrd' #FIXME: use os.path

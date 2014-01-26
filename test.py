@@ -43,7 +43,7 @@ print; print "# Database metainfo parsing from rrd file"
 #pp.pprint(rrd.info('tests/samples/mini.rrd'))
 info = rrd.info('tests/samples/two-datasources.rrd')
 pp.pprint(info)
-d = rrd.Database.create(info)
+d = rrd.Database.create(info) #=rrd.Database.load(filename)
 pp.pprint(d)
 print d
 
@@ -70,7 +70,7 @@ print rrd.LINE.from_variable(speed, {'color':'ff0000'})
 
 
 print; print "# Whole graph command generation"
-d = rrd.Database.create(rrd.info('tests/samples/two-datasources.rrd'))
+d = rrd.Database.load('tests/samples/two-datasources.rrd')
 speed = rrd.Variable(d, 'speed')
 g = rrd.Graph([
     rrd.DEF.from_variable(speed), #FIXME: find way to specify which CF (from available
@@ -92,64 +92,14 @@ print g
 
 print; print "# Error catching test"
 try:
-    d = rrd.Database.create(rrd.info('tests/samples/mini.rrd'))
+    d = rrd.Database.load('tests/samples/mini.rrd')
     print d.update({'ds_name': 'value', 'b': 2})
 except Exception, e:
     print 'Catched exception:', e
 
 
 print; print "# Database values update"
-import time
-start_ts = int(time.mktime(time.strptime('01/12/2001', "%d/%m/%Y")))
-d = rrd.RRD('tests/tmp/update-test',
-            [rrd.DataSource('speed', rrd.GAUGE(60))],
-            [rrd.RRA('AVERAGE', xff=0.5, step=1, rows=60),
-             rrd.RRA('AVERAGE', 0.5, 10, 15),
-             rrd.RRA('AVERAGE', 0.5, 60, 600)],
-             step=60,
-             start=start_ts - 1)
-print d
-print rrd._call(str(d))
-pp.pprint(rrd.info('tests/tmp/update-test.rrd'))
-#d = rrd.Database.create(rrd.info('tests/tmp/update-test.rrd'))
-print d
-# Creates a sinusoidal speed
-import math as m
-import sys
-i = 0 #ugly?
-for cycle in range(2):
-    for degree in range(360):
-        # Timestamp
-        i += 1
-        delta = i * d.step
-        timestamp = start_ts + delta
-        # Sinus value 
-        amp = 1000
-        sin = int(amp + (amp * m.sin(m.radians(degree))))
-        # Update
-        #print "Update:", i, timestamp, time.ctime(timestamp), sin
-        sys.stdout.write('.')
-        d.update({'speed': sin}, timestamp=timestamp)
-print
-print 'Data start:', time.ctime(start_ts)
-print 'Data end:', time.ctime(timestamp)
+#FIXME: 2-3 lines long test
 
-# Creates graph
-speed = rrd.Variable(d, 'speed')
-g = rrd.Graph([rrd.DEF.from_variable(speed)],
-              [
-               rrd.AREA.from_variable(speed, {'color': 'ffffcc'}),
-               rrd.LINE.from_variable(speed, {'width': 2, 'color': 'ccff33'}),
-              ],
-              'g.png', {
-                  #FIXME: should rrdtool graph adapt to rrd data timespan ?
-                  'start': start_ts,
-                  #'start': timestamp - 20000,
-                  'end': timestamp
-              })
-print g
-g.draw()
-
-
-#print; print "# Database fetch"
-#print d.fetch()
+print; print "# Database fetch"
+#FIXME

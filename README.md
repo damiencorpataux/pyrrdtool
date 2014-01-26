@@ -6,6 +6,16 @@ pyrrdtool
 The purpose of thie rrdtool-cli facade library is to make
 the configuration of rrd creation, update and graph easier and faster.
 
+```python
+import pyrrdtool as rrd
+db = rrd.Database.load('tests/samples/mini.rrd')
+speed = rrd.Variable(db, 'speed')
+g = rrd.Graph([rrd.DEF.from_variable(speed)],
+              [rrd.AREA.from_variable(speed, {'color': 'ffffcc'}),
+              rrd.LINE.from_variable(speed, {'width': 2, 'color': 'ccff33'})])
+png_binary = g.draw()
+```
+
 By enabling the user to *create definitions* of rrdatabases, datasouces
 and graphs that are *modular* and *reusable* for creating, updating and graphing
 a wide variety of graphs,  easily and with peace of mind.

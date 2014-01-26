@@ -48,9 +48,7 @@
 #   flamestyle http://old.ed.zehome.com/?page=rrdtool2
 # - Separate lib into pyrrdtool.data and . graph ?
 #   for better readability ?
-# - OK Every class must have its .create(config),
-#   so that everybody know how to parse its related config object.
-#   just like databse.
+# - Manage the rrdcached daemon parameter
 
 
 # Below are classes that are reused across pyrrdtool components
@@ -97,6 +95,9 @@ class Variable(Component): #or Indicator ?
 #FIXME: Keep this for the pyrrd super-module, that provides more complex features.
 #class StyleTemplate(Component):
 #    "Base class for defining arbitrary style templates to be applied to the given datasource"
+#    #FIXME: implement quickly a system of color palette (a color:hex dict):
+#    #       this will enable style to specify color names, and apply a palette !
+#    #       over-the-top, usage of the palette must be optional for defining style.
 #    style = []
 #    def __init__(s, ds):
 #        pass
@@ -137,18 +138,14 @@ class Database(Component):
         s.step = step
         s.start = start
     def __str__(s):
-        "FIXME: returns the rrdtool create command arguments"
+        "Returns the rrdtool create command and arguments"
         args = {arg:getattr(s,arg)
-                for arg in ['start', 'step']
-                if getattr(s, arg)}
+                for arg in ['start', 'step'] if getattr(s, arg)}
         return "create %s %s %s %s" % (
             s.filename(),
             ' '.join(['--%s %s'%(k,v) for k,v in args.items()]),
             ' '.join([str(ds) for ds in s.datasources]),
             ' '.join([str(ds) for ds in s.rrarchives]))
-    def filename(s):
-        "Returns the database filename"
-        return s.name + '.rrd' #FIXME: use os.path
     @staticmethod
     def create(config):
         "Returns an instance from the given config dictionary"
@@ -156,12 +153,25 @@ class Database(Component):
         import os
         return Database(
             #name = os.path.splitext(os.path.basename(config.get('filename')))[0],
-            #FIXME: keep filename path
+            #FIXME: keep filename path in 'path' variable for name to stay clean ?
             name = os.path.splitext(config.get('filename'))[0],
             ds = [DS.create(name, c) for name,c in config.get('ds').items()],
             rra = [RRA.create(c) for c in config.get('rra')],
             start = config.get('start'),
             step = config.get('step'))
+    def filename(s):
+        "Returns the database filename"
+        return s.name + '.rrd' #FIXME: use os.path
+    def update(s, data, timestamp='N'):
+        "Updates database using the given dict (use 'U' for unknown values)"
+        import collections
+        data = collections.OrderedDict(data)
+        cmd = 'updatev %s --template %s -- %s:%s' % (
+            s.filename(),
+            ':'.join([str(k) for k in data]),
+            timestamp,
+            ':'.join([str(v) for k,v in data.items()]))
+        return _call(cmd)
 
 class DataSource(Component):
     "Represents a DataSource definition"
@@ -250,7 +260,7 @@ class RoundRobinArchive(Component):
     rows = None
     "Number of rows in the archive"
     "(a row is a slot containing a data; data type is: double)"
-    steps = None
+    step = None
     "Number of pdp represented by a row"
     xff = None
     "The ratio of allowed unknown pdp data per row (xfile factor)"
@@ -261,15 +271,15 @@ class RoundRobinArchive(Component):
     "This affects how data is resampled to lower resolutions"
     "and should be chosen according to what you want to track"
     "eg. MIN is you want to track, say, a minimal service level"
-    def __init__(s, cf, xff, steps, rows):
+    def __init__(s, cf, xff, step, rows):
         s.cf = cf
         s.xff = xff
-        s.steps = steps
+        s.step = step
         s.rows = rows
     def __str__(s):
-        return 'RRA:%s:%s' % (
-            s.cf,
-            ':'.join([str(getattr(s, arg)) for arg in ['cf', 'xff','steps','rows']]))
+        order = ['cf', 'xff','step','rows']
+        return 'RRA:%s' % (
+            ':'.join([str(getattr(s, arg)) for arg in order]))
     @staticmethod
     def create(config):
         return RoundRobinArchive(
@@ -277,7 +287,7 @@ class RoundRobinArchive(Component):
             #FIXME: a parser function should take care of value format conversion
             #       eg. format(value) - note that it formatting has two directions
             xff = float(config.get('xff').replace(',','.')),
-            steps = int(config.get('pdp_per_row')),
+            step = int(config.get('pdp_per_row')),
             rows = int(config.get('rows')))
 
 
@@ -295,6 +305,10 @@ class Graph(Component):
     # https://github.com/oetiker/rrdtool-1.x/blob/master/src/rrd_graph.c#L4409
     #FIXME: most of these are style, a Graph
     args = {
+        #'name': here or as class variable ?
+        'start': None,
+        'end': None,
+        'step': None,
         'imgformat': None,
         #Values: PNG|SVG|EPS|PDF
         'border': None,
@@ -340,11 +354,13 @@ class Graph(Component):
     "Graph and print elements definitions (GraphStyle objects)"
     "reflects rrdtool graph [graph elelement ...] [print element ...] options"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
-    def __init__(s, data, style, name=None):
-        #FIXME: how to add options in constructor arguments, one by one or a list ?
+    #FIXME: bad, unhandy signature
+    def __init__(s, data, style, name=None, args={}):
         s.data = data
         s.style = style
         if name: s.name = name
+        #FIXME: how to add options in constructor arguments, one by one or a list ?
+        s.args = dict(s.args.items() + args.items())
     def __str__(s):
         def f(arg, value):
             return '--%s'%arg if type(value)==bool else '--%s %s'%(arg, value)
@@ -604,7 +620,9 @@ def _call(argline):
     out, err = process.communicate()
     #FIXME: Tobi says that rrdtool doesn't output an exit status,
     #       does it streams to stderr ?
-    if (err): raise(err)
+    if (err):
+        raise(Exception('%s (%s)' % (err.strip(),
+                                     process.returncode)))
     return out
     # !! don't use graphing from cli without pipe mode (rrdtool -) !
     #    It will reload fonts cache every time !

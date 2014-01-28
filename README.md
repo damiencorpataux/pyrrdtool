@@ -1,7 +1,7 @@
 pyrrdtool
 =========
 
-**A python rrdtool facade**
+**A python rrdtool facade** - work in progress
 
 The purpose of thie rrdtool-cli facade library is to make
 the configuration of rrd creation, update and graph easier and faster.
@@ -25,7 +25,7 @@ and graph that is easier and faster to use, with default and automatic cli optio
 generation.
 
 It should be easy to provide the graphing feature as a REST API that return
-graph images binaries.
+graph images binaries (see [rrdli](https://github.com/damiencorpataux/rrdli)).
 
 --
 

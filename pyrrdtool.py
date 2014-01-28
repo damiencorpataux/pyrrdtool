@@ -755,7 +755,7 @@ def _call(argline):
     #FIXME: Tobi says that rrdtool doesn't output an exit status,
     #       does it streams to stderr ?
     if (err):
-        raise(Exception('%s (%s)' % (err.strip(),
+        raise(Exception('%s (exitcode:%s)' % (err.strip(),
                                      process.returncode)))
     return out
     # !! don't use graphing from cli without pipe mode (rrdtool -) !

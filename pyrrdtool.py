@@ -177,7 +177,7 @@ class Database(Component):
     @staticmethod
     def load(filename):
         "Returns an instance from que given rrd filename"
-        rrd.Database.create(rrd.info(filename))
+        return Database.create(info(filename))
     def filename(s):
         "Returns the database filename"
         return s.name + '.rrd' #FIXME: use os.path
@@ -194,13 +194,20 @@ class Database(Component):
             ':'.join([str(v) for k,v in data.items()]))
         return _call(cmd)
     def fetch(s, cf=None, start=None, end=None, resolution=None):
-        "Fetches and returns data from rrd"
         #FIXME: implement remaining command options
         #       iterate kwargs ?
+        "Fetches and returns data from rrd"
+        #FIXME: arbitrarily uses the first rra cf
         cf = cf or s.rrarchives[0].cf
         cmd = 'fetch %s %s' % (s.filename(), cf)
+        raw = _call(cmd)
         #FIXME: return an array of better data (eg with readable time)
-        return _call(cmd)
+        header, data = raw.split('\n\n')
+        import re
+        ds = re.findall(r'\w+', header)
+        values = [{k:dict(zip(ds, v.split()))}
+                  for k,v in [line.split(': ') for line in data.split('\n')[:-1]]]
+        return values
 
 class DataSource(Component):
     "Represents a DataSource definition"
@@ -385,6 +392,7 @@ class Graph(Component):
     "reflects rrdtool graph [graph elelement ...] [print element ...] options"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     #FIXME: bad, unhandy signature
+    #       put name at the end ?
     def __init__(s, data, style, name=None, args={}):
         s.data = data
         s.style = style

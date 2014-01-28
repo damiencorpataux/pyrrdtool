@@ -218,8 +218,6 @@ class DataSource(Component):
     # http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html
     type = None
     "DataType to use for this source"
-    database = None #FIXME: database object reference should be set by constructor
-    "Database name"
     def __init__(s, name, type):
         s.name = name
         s.type = type

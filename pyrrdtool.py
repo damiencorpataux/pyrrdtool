@@ -332,61 +332,24 @@ class Graph(Component):
     "Represents a rrdtool graph and contains all the possible options"
     "for the rrdtool graph function"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph.en.html"
-    name = '-'
-    #FIXME: Reuse cli options names and doc (--* options)
-    #       Implement as 1 attribute per option, or options = [] ?
-    # All cli options:
-    # https://github.com/oetiker/rrdtool-1.x/blob/master/src/rrd_graph.c#L4409
-    #FIXME: most of these are style, move them into class GraphStyle
-    #       and reference GraphStyle from Graph.style
     args = {
-        #'name': here or as class variable ?
+        #FIXME: merge GraphStyle into this dict, or simpler:
+        #       style belongs to Graph, and rrdli simply merges
+        #       graph style config(s) into Graph -> yes this is it.
         'start': None,
         'end': None,
-        'step': None,
-        'imgformat': None,
-        #Values: PNG|SVG|EPS|PDF
-        'border': None,
-        #Border width (in pixels)
-        'color': {},
-        #Graph elements colors, eg. {'CANVAS':'ffaa00', 'GRID':'cc00cc'}
-        #BACK background
-        #CANVAS:background of the actual graph,
-        #FRAME: line around the color spots
-        #FONT: font color
-        #GRID, MGRID: the (major) grid
-        #AXIS graph axish
-        #ARROW: xy arrow heads
-        #SHADEA: top border
-        #SHADEB: right and bottom border
-        'slope-mode': None,
-        #Enable curving the staircase data, although it is not all true
-        'grid-dash': None,
-        #Values: on, off
-        'watermark': '',
-        #String to use for watermark drawing
-        'disable-rrdtool-tag': True, #FIXME: set to none by default
-        #Hides Tobis credits
-        'graph-render-mode': None,
-        #Graph antialias ('normal': enabled (default), 'mono': disabled)
-        'font-render-mode': None,
-        #Font antialias (normal (default), light, mono)
-        'zoom': None,
-        #Zooms the graph by the given factor (>0)
-        'base': None,
-        #If you are graphing memory (and NOT network traffic) this switch
-        #should be set to 1024 so that one Kb is 1024 byte. For traffic
-        #measurement, 1 kb/s is 1000 b/s
-        'option2': None,
-        'option3': None,
+        'title': None,
     }
+    "Graph arguments (excepted style arguments)"
+    name = '-'
+    "Filename to create, dash (-) for stdout"
     data = []
     "Variables and calculation definitions (GraphData objects)"
     "reflects rrdtool graph [data definition ...] [data calculation ...]"
     "[variable definition ...] options"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_data.en.html"
     style = []
-    "Graph and print elements definitions (GraphStyle objects)"
+    "Graph and print elements definitions (DataStyle objects)"
     "reflects rrdtool graph [graph elelement ...] [print element ...] options"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     #FIXME: bad, unhandy signature
@@ -480,16 +443,82 @@ class VDEF(GraphData_Common):
     pass
 
 # Below are graph style classes
-# FIXME: it should be (but it is to complicated, for now Data Def&Style are merged into LINE, AREA,... classes)
-# GraphElement
-# +-Graph (contains a graph style)
-# +-GraphStyle (overall style; graph cmd options: --border, --color, --...)
-# +-GraphData
-# | +-DEF, CDEF, VDEF
-# +-GraphDataStyle
-#   +-LINE, AREA, PRINT, etc,
-#     #FIXME: me wight separate style and ds-definition, but that's more complexity than benefit.
 class GraphStyle(GraphElement):
+    "Style representation of a graph"
+    # All cli options:
+    #https://github.com/oetiker/rrdtool-1.x/blob/master/src/rrd_graph.c#L4409
+    args = {
+        'step': None,
+        'vertical-label': None,
+        'width': None,
+        'height': None,
+        'only-graph': None,
+        'full-size-mode': None,
+        'upper-limit': None,
+        'lower-limit': None,
+        'rigid': None,
+        'alt-autoscale': None,
+        'alt-autoscale-max': None,
+        'no-gridfit': None,
+        'x-grid': None,
+        'y-grid': None,
+        'alt-y-grid': None,
+        'logarithmic': None,
+        'units-exponent': None,
+        'units-length': None,
+        'units': None, #FIXME: doc says --units=si (k,M,etc), mind the =
+        'right-axis': None,
+        'right-axis-format': None,
+        'no-legend': None,
+        'force-rules-legend': None,
+        'legend-position': None,
+        'legend-direction': None,
+        'lazy': None,
+        'daemon': None,
+        'imginfo': None,
+        'color': {},
+        #Graph elements colors, eg. {'CANVAS':'ffaa00', 'GRID':'cc00cc'}
+        #BACK background
+        #CANVAS:background of the actual graph,
+        #FRAME: line around the color spots
+        #FONT: font color
+        #GRID, MGRID: the (major) grid
+        #AXIS graph axish
+        #ARROW: xy arrow heads
+        #SHADEA: top border
+        #SHADEB: right and bottom border
+        'grid-dash': None,
+        'border': None,
+        'dynamic-labels': None,
+        'zoom': None,
+        #Zooms the graph by the given factor (>0)
+        'font': None,
+        'font-render-mode': None, 
+        #Font antialias (normal (default), light, mono)
+        'font-smoothing-threshold': None,
+        'pango-markup': None,
+        'slope-mode': None,
+        #Enable curving the staircase data, although it is not all true
+        'graph-render-mode': None,
+        #Graph antialias ('normal': enabled (default), 'mono': disabled)
+        'imgformat': None,
+        #Values: PNG|SVG|EPS|PDF
+        'tabwidth': None,
+        'base': None,
+        #If you are graphing memory (and NOT network traffic) this switch
+        #should be set to 1024 so that one Kb is 1024 byte. For traffic
+        #measurement, 1 kb/s is 1000 b/s
+        'border': None,
+        #Border width (in pixels)
+        'grid-dash': None,
+        #Values: on, off
+        'watermark': '',
+        #String to use for watermark drawing
+        'disable-rrdtool-tag': True, #FIXME: set to none by default
+        #Hides Tobis credits
+    }
+
+class DataStyle(GraphElement):
     "Base class for graph print elements classes"
     "http://oss.oetiker.ch/rrdtool/doc/rrdgraph_graph.en.html"
     args = {}
@@ -514,7 +543,7 @@ class GraphStyle(GraphElement):
 #NOTE: some common factors:
 # a. legend, color
 # b. dashes, dashes-offset
-class LINE(GraphStyle):
+class LINE(DataStyle):
     args = {
         'width': None,
         'value': None,
@@ -556,7 +585,7 @@ class LINE(GraphStyle):
         s.args = dict(s.args.items() + args.items())
         return s
 
-class AREA(GraphStyle):
+class AREA(DataStyle):
     args = {
         'value':  None,
         'color':  None,
@@ -587,7 +616,7 @@ class AREA(GraphStyle):
         s.args = dict(s.args.items() + args.items())
         return s
 
-class PRINT(GraphStyle):
+class PRINT(DataStyle):
     args = {
         'vname': None,
         'format': None,
@@ -610,16 +639,16 @@ class GPRINT(PRINT):
         baseconfig = { 'vname': variable.vname }
         return GPRINT(dict(baseconfig.items() + config.items()))
 #or class GPRINT(PRINT): pass
-#or class GPRINT(GraphStyle):
+#or class GPRINT(DataStyle):
 #    args = {
 #        'vname': None,
 #        'format': None,
 #    }
-#class COMMENT(GraphStyle):
+#class COMMENT(DataStyle):
 #    args = {
 #        'text': None,
 #    }
-class VRULE(GraphStyle):
+class VRULE(DataStyle):
     args = {
         'time': None,
         'color': None,
@@ -643,7 +672,7 @@ class VRULE(GraphStyle):
             'dashes': ':dashes=%s' % value,
             'dash-offset': ':dashes-offset=%s' % value
         }[argument_key]
-class HRULE(GraphStyle):
+class HRULE(DataStyle):
     args = {
         'value': None,
         'color': None,
@@ -667,7 +696,7 @@ class HRULE(GraphStyle):
             'dashes': ':dashes=%s' % value,
             'dash-offset': ':dashes-offset=%s' % value
         }[argument_key]
-#class TICK(GraphStyle):
+#class TICK(DataStyle):
 #    args = {
 #        'vname': None,
 #        'color': None,
@@ -675,12 +704,12 @@ class HRULE(GraphStyle):
 #        'fraction': None,
 #        'legend': None,
 #    }
-#class SHIFT(GraphStyle):
+#class SHIFT(DataStyle):
 #    args = {
 #        'vname': None,
 #        'offset': None,
 #    }
-#class TEXTALIGN(GraphStyle):
+#class TEXTALIGN(DataStyle):
 #    args = {
 #        'value': None,
 #        #"Values: left|right|justified|center"

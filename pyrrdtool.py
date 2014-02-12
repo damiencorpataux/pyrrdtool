@@ -63,6 +63,17 @@
 # - Include Holt Winters args/types handling (eg. HWPREDICT datasrc types, ...)
 
 
+import logging
+# Setups logging level
+logging.basicConfig(
+    level=getattr(logging, 'DEBUG'),
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    filename='/tmp/pyrrdtool.log'
+)
+log = logging.getLogger(__name__)
+log.debug('Initalized logging')
+
+
 # Below are classes that are reused across pyrrdtool components
 class Component():
     "Base class for all pyrrdtool classes"
@@ -361,10 +372,16 @@ class Graph(Component):
         #FIXME: how to add options in constructor arguments, one by one or a list ?
         s.args = dict(s.args.items() + args.items())
     def __str__(s):
-        def f(arg, value):
-            return '--%s'%arg if type(value)==bool else '--%s %s'%(arg, value)
+        def format(arg, value):
+            #return '--%s'%arg if type(value)==bool else '--%s %s'%(arg, value)
+            if type(value) == bool:
+                return '--%s' % arg
+            elif arg == 'color':
+                return ' '.join(['--color %s#%s'%(element.upper(), color) for element, color in value.items()])
+            else:
+                return'--%s %s' % (arg, value)
         #FIXME: mind the falsy values (eg 0)
-        args = [f(arg, s.args.get(arg)) for arg in s.args if s.args.get(arg)]
+        args = [format(arg, s.args.get(arg)) for arg in s.args if s.args.get(arg)]
         return 'graph %s %s %s %s' % (
             s.name,
             ' '.join(args),
@@ -373,7 +390,9 @@ class Graph(Component):
     def draw(s):
         "Returns the graph binary"
         #FIXME: handle options (imageformat, etc.)
-        return _call(str(s))
+        command = str(s)
+        log.info('Drawing graph using command: %s' % command)
+        return _call(command)
 
 class GraphElement(Component):
     #FIXME: we might use the following common string serializer
@@ -638,16 +657,6 @@ class GPRINT(PRINT):
     def from_variable(variable, config={}):
         baseconfig = { 'vname': variable.vname }
         return GPRINT(dict(baseconfig.items() + config.items()))
-#or class GPRINT(PRINT): pass
-#or class GPRINT(DataStyle):
-#    args = {
-#        'vname': None,
-#        'format': None,
-#    }
-#class COMMENT(DataStyle):
-#    args = {
-#        'text': None,
-#    }
 class VRULE(DataStyle):
     args = {
         'time': None,
@@ -771,11 +780,8 @@ def info(filename):
 
 def _call(argline):
     "Helper for rrdtool command calls"
-    cmd = ['rrdtool'] + argline.split()
-    #import subprocess
-    #return subprocess.check_output(cmd, shell=False)
-    #FIXME
     import subprocess
+    cmd = ['rrdtool'] + argline.split()
     process = subprocess.Popen(cmd,
         shell=False,
         stdout=subprocess.PIPE, 
@@ -792,68 +798,3 @@ def _call(argline):
     #    Tobi says the way out is to run 'rrdtool -' (pipe mode)
     # Use it from a shared library to avoid reloading fonts cache
     # on every call (does pythonrrd lib do that, is it a shared lib ??)
-
-
-# Below are low level helper function for calling rrdtool cli with arguments
-
-# http://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html
-# rrdtool create filename [--start|-b start time] [--step|-s step] [--no-overwrite] [DS:ds-name:DST:dst arguments] [RRA:CF:cf arguments]
-# rrdtool create test.rrd        \
-#    --start 920804400          \
-#    DS:speed:COUNTER:600:U:U   \
-#    RRA:AVERAGE:0.5:1:24       \
-#    RRA:AVERAGE:0.5:6:10
-#
-#FIXME: for now str(Database) outputs the create command args
-#       it is better to use this create() function below to do that job
-#       but shall we use that long func signature, or just create(Database) ?
-#def create(filename, start=None, step=None, overwrite=True, ds=[], rra=[]):
-#    pass
-
-# http://oss.oetiker.ch/rrdtool/doc/rrdupdate.en.html
-# rrdtool {update | updatev} filename [--template|-t ds-name[:ds-name]...] [--daemon address] [--] N|timestamp:value[:value...] at-timestamp@value[:value...] [timestamp:value[:value...] ...]
-# rrdtool update test.rrd 920804700:12345 920805000:12357 920805300:12363
-#def update(filename, value, time='N', verbose=False):
-#    # rrdtool update filename time:value
-#    # use updatev if verbose=True
-#    pass
-
-# http://oss.oetiker.ch/rrdtool/doc/rrdfetch.en.html
-# rrdtool fetch filename CF [--resolution|-r resolution] [--start|-s start] [--end|-e end] [--daemon address]
-# rrdtool fetch test.rrd AVERAGE --start 920804400 --end 920809200
-#def fetch(filename, consolidation='AVERAGE', start=None, end=None, resolution=None, daemon=None):
-##    pass
-
-# http://oss.oetiker.ch/rrdtool/doc/rrdgraph.en.html
-# rdtool graph|graphv filename [option ...] [data definition ...] [data calculation ...] [variable definition ...] [graph element ...] [print element ...]
-# rrdtool graph speed3.png                            \
-#    --start 920804400 --end 920808000               \
-#    --vertical-label km/h                           \
-#    DEF:myspeed=test.rrd:speed:AVERAGE              \
-#    "CDEF:kmh=myspeed,3600,*"                       \
-#    CDEF:fast=kmh,100,GT,kmh,0,IF                   \
-#    CDEF:good=kmh,100,GT,0,kmh,IF                   \
-#    HRULE:100#0000FF:"Maximum allowed"              \
-#    AREA:good#00FF00:"Good speed"                   \
-#    AREA:fast#FF0000:"Too fast"
-#def graph(indicators=[], outfile='-', options=[], data=[]):
-#    #FIXME: Shall we enumerate all (20+) cli options in the fn signature
-#    #       or use a options list ? (with default best options)
-#    pass
-
-# Below are definition import/export functions
-# This might be another piece of software (standalone or with webview)
-def json_load(filename):
-    "Returns a list of objects instances defined in the given json filename"
-    pass
-
-def json_import(string):
-    pass
-
-def json_export(obj):
-    "Serializes the given object into a json string"
-    #FIXME: not working properly
-    #FIXME: implement a recursive function to develop variables containing dict objects
-    #FIXME: how to manage both objects serialization and referencing (for composition) ?
-    import json
-    return json.dumps(obj.__dict__.items())

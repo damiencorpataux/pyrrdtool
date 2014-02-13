@@ -577,6 +577,8 @@ class LINE(DataStyle):
     @staticmethod
     def from_variable(variable, config={}):
         #print __class__ #should be LINE, if so, I can use this for GraphDataStyle.from_variable()
+        #FIXME: if only variable.vname is used in every DataStyle.from_variable,
+        #       then simply use vname in signature
         baseconfig = { 'value': variable.vname } #if 'value' in LINE.args else {}
         return LINE(dict(baseconfig.items() + config.items()))
     def format(s, argument_key):
